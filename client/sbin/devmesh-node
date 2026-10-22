@@ -1,0 +1,256 @@
+#!/usr/bin/env bash
+# devmesh-node — root helper on each machine, driven by systemd units.
+#   tunnel      reverse SSH tunnel to the hub (path B); exec'd by devmesh-tunnel.service
+#   keys-sync   pull authorized client keys from the hub (every minute)
+#   reresolve   follow the hub to a new IP after a migration (every 2 minutes)
+#   hubwatch    alert via ntfy.sh when the hub itself is down (optional)
+#   mesh        mesh firewall: status | open <tcp|udp>/<port[-port]> | close <...> (root)
+set -euo pipefail
+
+NODE_ETC=${NODE_ETC:-/etc/devmesh}
+NODE_STATE=${NODE_STATE:-/var/lib/devmesh}
+
+node_die() {
+  printf 'devmesh-node: %s\n' "$*" >&2
+  exit 1
+}
+
+node_load() {
+  # shellcheck source=/dev/null
+  source "$NODE_ETC/node.conf"
+  node_ssh_opts=(
+    -i "$NODE_ETC/tunnel_ed25519" -o IdentitiesOnly=yes -o BatchMode=yes
+    -o UserKnownHostsFile="$NODE_ETC/known_hosts" -o StrictHostKeyChecking=yes
+    -o HostKeyAlias="$DM_HUB_HOST" -o ServerAliveInterval=15 -o ServerAliveCountMax=3
+    -o ConnectTimeout=10 -p "${DM_HUB_SSH_PORT:-2222}"
+  )
+}
+
+# A removed machine keeps its services running. Retrying every few seconds with a key
+# the hub no longer accepts would let fail2ban ban this network's public IP (and with it
+# every other device behind it). Once the hub says "Permission denied", back off to one
+# attempt per hour; the marker clears on the next successful login.
+NODE_BACKOFF=${NODE_BACKOFF:-3600}
+node_revoked_marker() { printf '%s/revoked\n' "$NODE_STATE"; }
+
+node_is_backing_off() {
+  local m age
+  m=$(node_revoked_marker)
+  [[ -e $m ]] || return 1
+  age=$(($(date +%s) - $(cat "$m" 2>/dev/null || echo 0)))
+  ((age < NODE_BACKOFF))
+}
+
+# node_hub_ssh OUT CMD... — ssh to the hub, recording revocation from stderr.
+node_hub_ssh() {
+  local out=$1 err rc=0
+  shift
+  err=$(mktemp)
+  # shellcheck disable=SC2029 # arguments are meant for the hub
+  ssh "${node_ssh_opts[@]}" "tunnel@$DM_HUB_HOST" "$@" >"$out" 2>"$err" || rc=$?
+  if ((rc != 0)) && grep -q 'Permission denied' "$err"; then
+    mkdir -p "$NODE_STATE"
+    date +%s >"$(node_revoked_marker)"
+  elif ((rc == 0)); then
+    rm -f "$(node_revoked_marker)"
+  fi
+  cat "$err" >&2
+  rm -f "$err"
+  return "$rc"
+}
+
+node_tunnel() {
+  [[ $DM_PORT =~ ^[0-9]+$ ]] || node_die "no tunnel port configured"
+  if node_is_backing_off; then
+    echo "devmesh-node: hub rejected this machine; retrying in at most ${NODE_BACKOFF}s" >&2
+    sleep "$NODE_BACKOFF"
+    exit 0
+  fi
+  # Preflight on the forced command: tells "revoked" apart from "hub unreachable".
+  node_hub_ssh /dev/null keys || {
+    sleep 5
+    exit 1
+  }
+  exec ssh -N "${node_ssh_opts[@]}" -o ExitOnForwardFailure=yes \
+    -R "localhost:$DM_PORT:localhost:${DM_LOCAL_SSH_PORT:-22}" "tunnel@$DM_HUB_HOST"
+}
+
+# Only accept lines that are bare ed25519 keys tagged devmesh:<name> (and at least one).
+node_valid_keys() {
+  local re='^ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI[A-Za-z0-9+/]{43} devmesh:[a-z][a-z0-9-]*$'
+  grep -q . "$1" || return 1
+  ! grep -v '^$' "$1" | grep -Evq "$re"
+}
+
+# DM_TRUST=signed: the hub's bundle is only a carrier. A key is installed when an approver in
+# the local allowed_signers signed it (or is itself an approver); everything else is dropped
+# and logged. The result replaces the bundle file, ready for node_valid_keys.
+node_signed_keys() {
+  local bundle=$1 lib=${NODE_SHARE:-/usr/local/share/devmesh}/lib/trust_common.sh out rc=0 kind name key
+  [[ -r $lib ]] || node_die "signed mode needs $lib"
+  # shellcheck source=/dev/null
+  source "$lib"
+  out=$(tr_process_bundle "$NODE_ETC/allowed_signers" "$bundle" 1) || rc=$?
+  ((rc != 3)) || node_die "signed mode but no $NODE_ETC/allowed_signers (run: dm trust pin); keeping the current keys"
+  ((rc == 0)) || node_die "hub returned an unparseable bundle; keeping the current keys"
+  while read -r kind name key; do
+    if [[ $kind == client || $kind == signer ]]; then printf '%s devmesh:%s\n' "$key" "$name"; fi
+  done <<<"$out" | awk '!seen[$0]++' >"$bundle"
+}
+
+# One rule for every verifier (trust_common.sh tr_mode): signed when DM_TRUST=signed or an
+# allowed_signers exists. Without the library the node cannot verify, so it refuses when signed.
+node_trust_mode() {
+  local lib=${NODE_SHARE:-/usr/local/share/devmesh}/lib/trust_common.sh
+  if [[ -r $lib ]]; then
+    # shellcheck source=/dev/null
+    source "$lib"
+    tr_mode "$NODE_ETC/allowed_signers" "${DM_TRUST:-}"
+  elif [[ ${DM_TRUST:-open} == signed || -s $NODE_ETC/allowed_signers ]]; then
+    node_die "signed mode needs $lib"
+  else
+    printf 'open\n'
+  fi
+}
+
+NODE_TMP=""
+node_keys_sync() {
+  local target="$NODE_ETC/clients.pub" cmd=keys
+  # Global, not local: the EXIT trap runs after this function has returned (set -u).
+  NODE_TMP=$(mktemp "$target.XXXXXX")
+  trap 'rm -f "${NODE_TMP:-}"' EXIT
+  local tmp=$NODE_TMP
+  local version mode
+  if node_is_backing_off; then
+    return 0
+  fi
+  mode=$(node_trust_mode) || node_die "cannot decide the trust mode"
+  [[ $mode != signed ]] || cmd=keys2
+  version=$(cat "${NODE_SHARE:-/usr/local/share/devmesh}/VERSION" 2>/dev/null || printf '%s' "${DM_VERSION:-0.0.0}")
+  # "keys <version>" also reports the installed client version (shown by "devmesh ls").
+  node_hub_ssh "$tmp" "$cmd" "$version" || node_die "cannot fetch keys from hub"
+  [[ $cmd != keys2 ]] || node_signed_keys "$tmp"
+  node_valid_keys "$tmp" || node_die "hub returned an invalid key list; keeping the current one"
+  cmp -s "$tmp" "$target" && return 0
+  chmod 0644 "$tmp"
+  mv -f "$tmp" "$target"
+  trap - EXIT
+}
+
+node_hub_handshake_age() {
+  local hs
+  hs=$(wg show "$DM_WG_IFACE" latest-handshakes 2>/dev/null | awk -v k="$DM_HUB_WG_PUB" '$1 == k {print $2}')
+  [[ $hs =~ ^[0-9]+$ && $hs -gt 0 ]] || {
+    printf '999999\n'
+    return
+  }
+  printf '%s\n' $(($(date +%s) - hs))
+}
+
+node_reresolve() {
+  (($(node_hub_handshake_age) > 135)) || return 0
+  wg set "$DM_WG_IFACE" peer "$DM_HUB_WG_PUB" endpoint "$DM_HUB_HOST:$DM_WG_PORT"
+}
+
+node_hub_ok() {
+  (($(node_hub_handshake_age) < 180)) && return 0
+  timeout 5 bash -c "exec 3<>/dev/tcp/$DM_HUB_HOST/${DM_HUB_SSH_PORT:-2222}" 2>/dev/null
+}
+
+# State: "fails <n> <alerted>". Alert after 3 consecutive failures, once; notify recovery.
+node_hubwatch() {
+  [[ ${DM_WATCH_TOPIC:--} != - ]] || return 0
+  local file="$NODE_STATE/hubwatch" fails=0 alerted=0
+  mkdir -p "$NODE_STATE"
+  read -r _ fails alerted 2>/dev/null <"$file" || true
+  if node_hub_ok; then
+    ((alerted)) && curl -fsS -m 10 -H "Title: devmesh hub is back" -d "hub reachable again (seen by $DM_NAME)" \
+      "https://ntfy.sh/$DM_WATCH_TOPIC" >/dev/null || true
+    printf 'fails 0 0\n' >"$file"
+    return 0
+  fi
+  fails=$((fails + 1))
+  if ((fails >= 3 && ! alerted)); then
+    curl -fsS -m 10 -H "Title: devmesh hub is down" -H "Tags: red_circle" -d "hub unreachable (seen by $DM_NAME)" \
+      "https://ntfy.sh/$DM_WATCH_TOPIC" >/dev/null && alerted=1
+  fi
+  printf 'fails %s %s\n' "$fails" "$alerted" >"$file"
+}
+
+# Mesh firewall (Linux). The rules and the entry validation live in devmesh-node-fw.
+node_fw_script() { printf '%s/devmesh-node-fw\n' "$(dirname "${BASH_SOURCE[0]}")"; }
+
+node_mesh_list() {
+  local fw
+  fw=$(node_fw_script)
+  [[ -r $fw ]] || node_die "missing $fw"
+  # shellcheck source=/dev/null
+  (source "$fw" && NODE_ETC=$NODE_ETC fw_open_list)
+}
+
+# node_mesh_write LIST... — replace DM_MESH_OPEN in node.conf (the line is dropped when empty).
+node_mesh_write() {
+  local conf="$NODE_ETC/node.conf" tmp
+  tmp=$(mktemp "$conf.XXXXXX")
+  grep -v '^DM_MESH_OPEN=' "$conf" >"$tmp" || true
+  (($#)) && printf 'DM_MESH_OPEN="%s"\n' "$*" >>"$tmp"
+  chmod 0644 "$tmp"
+  mv -f "$tmp" "$conf"
+}
+
+node_mesh() {
+  local sub=${1:-status} arg=${2:-} fw entry entries=() found=0 kept=()
+  fw=$(node_fw_script)
+  # shellcheck source=/dev/null
+  source "$fw"
+  case $sub in
+    status)
+      printf 'open on the mesh: ssh (tcp/22), mosh (udp/60000-61000), ping\n'
+      while read -r entry; do
+        [[ -z $entry ]] || printf 'open on the mesh: %s\n' "$entry"
+      done < <(node_mesh_list)
+      return 0
+      ;;
+    open | close) ;;
+    *) node_die "usage: devmesh-node mesh status|open <proto/port>|close <proto/port>" ;;
+  esac
+  [[ $EUID -eq 0 || ${DEVMESH_ALLOW_NONROOT:-0} == 1 ]] || node_die "mesh $sub needs root (use sudo)"
+  fw_valid_entry "$arg" || node_die "invalid port '$arg' (examples: tcp/8000, udp/5353, tcp/8000-8010)"
+  while read -r entry; do
+    [[ -z $entry ]] || entries+=("$entry")
+  done < <(node_mesh_list)
+  for entry in ${entries[@]+"${entries[@]}"}; do
+    if [[ $entry == "$arg" ]]; then found=1; else kept+=("$entry"); fi
+  done
+  if [[ $sub == open ]]; then
+    kept=(${entries[@]+"${entries[@]}"})
+    ((found)) || kept+=("$arg")
+  fi
+  node_mesh_write ${kept[@]+"${kept[@]}"}
+  # Reapply now when the interface is up; otherwise the next wg-quick up does it.
+  if wg show "$DM_WG_IFACE" >/dev/null 2>&1; then
+    NODE_ETC=$NODE_ETC bash "$fw" up "$DM_WG_IFACE"
+  fi
+  node_mesh status
+}
+
+node_main() {
+  case ${1:-} in
+    tunnel | keys-sync | reresolve | hubwatch | mesh) node_load ;;
+    *)
+      echo "usage: devmesh-node tunnel|keys-sync|reresolve|hubwatch|mesh" >&2
+      exit 2
+      ;;
+  esac
+  case $1 in
+    tunnel) node_tunnel ;;
+    keys-sync) node_keys_sync ;;
+    reresolve) node_reresolve ;;
+    hubwatch) node_hubwatch ;;
+    mesh) shift && node_mesh "$@" ;;
+  esac
+}
+
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+  node_main "$@"
+fi

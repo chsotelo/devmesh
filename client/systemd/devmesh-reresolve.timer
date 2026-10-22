@@ -1,0 +1,9 @@
+[Unit]
+Description=devmesh: follow the hub to a new IP after a migration
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+
+[Install]
+WantedBy=timers.target

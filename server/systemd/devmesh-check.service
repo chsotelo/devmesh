@@ -1,0 +1,6 @@
+[Unit]
+Description=devmesh: alert when a machine goes down or comes back
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/devmesh check

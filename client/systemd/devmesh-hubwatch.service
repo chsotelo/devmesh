@@ -1,0 +1,6 @@
+[Unit]
+Description=devmesh: alert when the hub itself is unreachable
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/devmesh-node hubwatch

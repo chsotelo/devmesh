@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# devmesh-node-fw up|down <iface> — wg-quick PostUp/PostDown hook on Linux machines (root).
+# Inbound traffic on the mesh interface is limited to: established connections, ping, SSH,
+# mosh (UDP 60000-61000) and the ports listed in DM_MESH_OPEN (node.conf). Everything else
+# is dropped. All rules live in the DEVMESH-IN chain; nothing else is ever touched.
+# Without iptables the machine is left as it was (warning, exit 0).
+set -euo pipefail
+set -f # the port list is split on spaces; never expanded as file globs
+
+NODE_ETC=${NODE_ETC:-/etc/devmesh}
+FW_CHAIN=DEVMESH-IN
+# One entry: tcp/<port>, udp/<port> or tcp|udp/<a>-<b>, ports 1-65535, a <= b.
+FW_ENTRY_RE='^(tcp|udp)/([1-9][0-9]{0,4})(-([1-9][0-9]{0,4}))?$'
+
+fw_die() {
+  printf 'devmesh-node-fw: %s\n' "$*" >&2
+  exit 2
+}
+
+# fw_valid_entry ENTRY — strict validation, no side effects.
+fw_valid_entry() {
+  [[ $1 =~ $FW_ENTRY_RE ]] || return 1
+  local a=${BASH_REMATCH[2]} b=${BASH_REMATCH[4]:-}
+  [[ -n $b ]] || b=$a
+  ((a <= 65535 && b <= 65535 && a <= b))
+}
+
+# fw_open_list — DM_MESH_OPEN from node.conf, one entry per line (empty when unset).
+fw_open_list() {
+  local v
+  [[ -r $NODE_ETC/node.conf ]] || return 0
+  v=$(
+    DM_MESH_OPEN=""
+    # shellcheck source=/dev/null
+    source "$NODE_ETC/node.conf"
+    printf '%s' "${DM_MESH_OPEN:-}"
+  )
+  # shellcheck disable=SC2086 # word splitting is the list format
+  (($(wc -w <<<"$v"))) && printf '%s\n' $v
+  return 0
+}
+
+fw_up() {
+  local iface=$1 entries entry proto ports
+  entries=$(fw_open_list)
+  for entry in $entries; do
+    fw_valid_entry "$entry" || fw_die "invalid DM_MESH_OPEN entry '$entry'; firewall not changed"
+  done
+  command -v iptables >/dev/null || {
+    echo "devmesh-node-fw: iptables not found; the mesh interface is left unfiltered" >&2
+    return 0
+  }
+  iptables -n -L "$FW_CHAIN" >/dev/null 2>&1 || iptables -N "$FW_CHAIN"
+  iptables -F "$FW_CHAIN"
+  iptables -A "$FW_CHAIN" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+  iptables -A "$FW_CHAIN" -p icmp --icmp-type echo-request -j ACCEPT
+  iptables -A "$FW_CHAIN" -p tcp --dport 22 -j ACCEPT
+  iptables -A "$FW_CHAIN" -p udp --dport 60000:61000 -j ACCEPT
+  for entry in $entries; do
+    proto=${entry%%/*}
+    ports=${entry#*/}
+    iptables -A "$FW_CHAIN" -p "$proto" --dport "${ports/-/:}" -j ACCEPT
+  done
+  iptables -A "$FW_CHAIN" -j DROP
+  iptables -C INPUT -i "$iface" -j "$FW_CHAIN" 2>/dev/null || iptables -I INPUT 1 -i "$iface" -j "$FW_CHAIN"
+}
+
+fw_down() {
+  local iface=$1
+  command -v iptables >/dev/null || return 0
+  while iptables -C INPUT -i "$iface" -j "$FW_CHAIN" 2>/dev/null; do
+    iptables -D INPUT -i "$iface" -j "$FW_CHAIN"
+  done
+  if iptables -n -L "$FW_CHAIN" >/dev/null 2>&1; then
+    iptables -F "$FW_CHAIN"
+    iptables -X "$FW_CHAIN"
+  fi
+}
+
+fw_main() {
+  local action=${1:-} iface=${2:-}
+  [[ $iface =~ ^[a-z][a-z0-9]{0,14}$ ]] || fw_die "usage: devmesh-node-fw up|down <iface>"
+  case $action in
+    up) fw_up "$iface" ;;
+    down) fw_down "$iface" ;;
+    *) fw_die "usage: devmesh-node-fw up|down <iface>" ;;
+  esac
+}
+
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+  fw_main "$@"
+fi

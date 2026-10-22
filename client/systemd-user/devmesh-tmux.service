@@ -1,0 +1,15 @@
+[Unit]
+Description=devmesh: keep the tmux session "main" alive (lingering user)
+StartLimitIntervalSec=0
+
+[Service]
+# A watchdog loop instead of Type=forking: it tolerates "main" already existing and
+# recreates it if the tmux server ever exits. KillMode=process leaves tmux running when
+# the loop itself is stopped or restarted.
+ExecStart=/bin/sh -c 'while :; do tmux has-session -t =main 2>/dev/null || tmux new-session -d -s main; sleep 30; done'
+KillMode=process
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

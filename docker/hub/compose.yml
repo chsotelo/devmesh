@@ -1,0 +1,27 @@
+# devmesh hub. Run from the repo root:
+#   HUB_HOST=203.0.113.10 docker compose -f docker/hub/compose.yml up -d
+# HUB_HOST is the public IP (IP mode, HTTPS on 8443) or a domain (see docker/hub/README.md).
+services:
+  hub:
+    image: ghcr.io/OWNER/devmesh-hub:latest
+    build:
+      context: ../..
+      dockerfile: docker/hub/Dockerfile
+    # WireGuard creates its interface in the host network namespace.
+    network_mode: host
+    cap_add: [NET_ADMIN]
+    devices: ["/dev/net/tun"]
+    environment:
+      HUB_HOST: ${HUB_HOST:?set HUB_HOST to the public IP or domain}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+      BACKUP_RECIPIENT: ${BACKUP_RECIPIENT:-}
+    volumes:
+      - devmesh-etc:/etc/devmesh
+      - devmesh-var:/var/lib/devmesh
+      - devmesh-tls:/etc/letsencrypt
+    restart: unless-stopped
+
+volumes:
+  devmesh-etc:
+  devmesh-var:
+  devmesh-tls:

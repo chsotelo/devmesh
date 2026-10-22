@@ -1,0 +1,21 @@
+#!/bin/sh
+# Forced command for machine tunnel keys (user "tunnel"): publish the authorized client
+# keys so each machine can sync them, and record the client version the machine reports
+# ("keys <version>") for "devmesh ls". $1 is the machine name, fixed in authorized_keys.
+#   keys  <version>   bare clients.pub (nodes with DM_TRUST=open)
+#   keys2 <version>   signed bundle (nodes with DM_TRUST=signed; they verify it themselves)
+name=$1
+cmd=${SSH_ORIGINAL_COMMAND%% *}
+version=${SSH_ORIGINAL_COMMAND#"$cmd"}
+version=${version# }
+case $name in *[!a-z0-9-]* | "") exit 1 ;; esac
+case $version in
+  *[!0-9.]* | "" | *..*) ;;
+  *)
+    mkdir -p "$HOME/versions" && printf '%s\n' "$version" >"$HOME/versions/$name"
+    ;;
+esac
+case $cmd in
+  keys2) exec cat "${DEVMESH_BUNDLE:-/etc/devmesh/clients.bundle}" ;;
+  *) exec cat "${DEVMESH_CLIENTS_PUB:-/etc/devmesh/clients.pub}" ;;
+esac

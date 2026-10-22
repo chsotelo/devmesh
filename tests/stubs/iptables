@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Test stub for iptables: state in $STUB_IPT, one "chain rule..." per line; ":chain" lines
+# mark user chains. Every call is logged to $STUB_LOG as "iptables ARGS" when set.
+set -euo pipefail
+db=${STUB_IPT:?}
+touch "$db"
+[[ -n ${STUB_LOG:-} ]] && printf 'iptables %s\n' "$*" >>"$STUB_LOG"
+has_chain() { grep -qxF ":$1" "$db"; }
+drop_lines() { grep -vE "$1" "$db" >"$db.tmp" || true; mv "$db.tmp" "$db"; }
+case $1 in
+  -n) # -n -L CHAIN
+    if [[ $3 == DOCKER-USER ]]; then
+      [[ ${STUB_DOCKER:-0} == 1 ]]
+    else
+      has_chain "$3"
+    fi
+    ;;
+  -C) chain=$2; shift 2; grep -qxF "$chain $*" "$db" ;;
+  -I) # -I CHAIN 1 RULE: insert before the chain's first rule (position 1 only)
+    chain=$2; [[ $3 == 1 ]] || { echo "iptables stub: -I position $3 unsupported" >&2; exit 1; }
+    shift 3
+    awk -v c="$chain" -v r="$chain $*" '!done && index($0, c " ") == 1 { print r; done = 1 } { print } END { if (!done) print r }' \
+      "$db" >"$db.tmp"
+    mv "$db.tmp" "$db"
+    ;;
+  -A) chain=$2; shift 2; echo "$chain $*" >>"$db" ;;
+  -D) chain=$2; shift 2; grep -vxF "$chain $*" "$db" >"$db.tmp" || true; mv "$db.tmp" "$db" ;;
+  -N) has_chain "$2" && { echo "iptables: Chain already exists." >&2; exit 1; }; echo ":$2" >>"$db" ;;
+  -F) has_chain "$2" || exit 1; drop_lines "^$2 " ;;
+  -X) has_chain "$2" || exit 1; grep -q "^$2 " "$db" && { echo "iptables: Chain not empty." >&2; exit 1; }; drop_lines "^:$2\$" ;;
+  *) echo "iptables stub: unsupported $*" >&2; exit 1 ;;
+esac

@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# devmesh-fw up|down <iface> — wg-quick PostUp/PostDown hook on the hub.
+# 1. Forwarding only between devmesh peers (iface -> same iface). On Docker hosts the rules
+#    must live in DOCKER-USER: Docker sets FORWARD to DROP and evaluates its chains first.
+#    There, "-i iface ! -o iface -j DROP" keeps published containers away from the mesh.
+# 2. INPUT from the mesh: only established traffic, ping and the devmesh sshd port.
+# Every rule is either in DEVMESH-HUB-IN or matches the devmesh interface; nothing else is touched.
+set -euo pipefail
+
+action=${1:-}
+iface=${2:-}
+[[ $iface =~ ^[a-z][a-z0-9]{0,14}$ ]] || {
+  echo "usage: devmesh-fw up|down <iface>" >&2
+  exit 2
+}
+
+hub_chain=DEVMESH-HUB-IN
+chain=FORWARD
+iptables -n -L DOCKER-USER >/dev/null 2>&1 && chain=DOCKER-USER
+rule=(-i "$iface" -o "$iface" -j ACCEPT)
+drop_rule=(-i "$iface" ! -o "$iface" -j DROP)
+hook_rule=(-i "$iface" -j "$hub_chain")
+
+# HUB_SSH_PORT from hub.conf (same file the hub reads); 2222 when absent or not a port.
+hub_ssh_port() {
+  local conf=${DEVMESH_ETC:-/etc/devmesh}/hub.conf p=""
+  [[ -r $conf ]] && p=$(sed -n 's/^HUB_SSH_PORT=//p' "$conf" | tail -n 1 | tr -d "\"'")
+  if [[ $p =~ ^[0-9]{1,5}$ ]] && ((p >= 1 && p <= 65535)); then
+    printf '%s\n' "$p"
+  else
+    printf '2222\n'
+  fi
+}
+
+case $action in
+  up)
+    iptables -C "$chain" "${rule[@]}" 2>/dev/null || iptables -I "$chain" 1 "${rule[@]}"
+    if [[ $chain == DOCKER-USER ]]; then
+      iptables -C "$chain" "${drop_rule[@]}" 2>/dev/null || iptables -I "$chain" 1 "${drop_rule[@]}"
+    fi
+    iptables -n -L "$hub_chain" >/dev/null 2>&1 || iptables -N "$hub_chain"
+    iptables -F "$hub_chain"
+    iptables -A "$hub_chain" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    iptables -A "$hub_chain" -p icmp --icmp-type echo-request -j ACCEPT
+    iptables -A "$hub_chain" -p tcp --dport "$(hub_ssh_port)" -j ACCEPT
+    iptables -A "$hub_chain" -j DROP
+    iptables -C INPUT "${hook_rule[@]}" 2>/dev/null || iptables -I INPUT 1 "${hook_rule[@]}"
+    ;;
+  down)
+    for c in FORWARD DOCKER-USER; do
+      while iptables -C "$c" "${rule[@]}" 2>/dev/null; do
+        iptables -D "$c" "${rule[@]}"
+      done
+      while iptables -C "$c" "${drop_rule[@]}" 2>/dev/null; do
+        iptables -D "$c" "${drop_rule[@]}"
+      done
+    done
+    while iptables -C INPUT "${hook_rule[@]}" 2>/dev/null; do
+      iptables -D INPUT "${hook_rule[@]}"
+    done
+    if iptables -n -L "$hub_chain" >/dev/null 2>&1; then
+      iptables -F "$hub_chain"
+      iptables -X "$hub_chain"
+    fi
+    ;;
+  *)
+    echo "usage: devmesh-fw up|down <iface>" >&2
+    exit 2
+    ;;
+esac

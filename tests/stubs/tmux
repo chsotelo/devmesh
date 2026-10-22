@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Test stub for tmux: canned list output, has-session from STUB_TMUX_HAS, calls logged.
+[[ -n ${STUB_LOG:-} ]] && printf 'tmux %s\n' "$*" >>"$STUB_LOG"
+case $1 in
+  has-session)
+    want=${3#=}
+    for s in ${STUB_TMUX_HAS:-}; do [[ $s == "$want" ]] && exit 0; done
+    exit 1
+    ;;
+  # new-session -d fails like tmux when the -s name is already in STUB_TMUX_HAS.
+  new-session)
+    prev=""
+    for a in "$@"; do
+      if [[ $prev == -s ]]; then
+        for s in ${STUB_TMUX_HAS:-}; do [[ $s == "$a" ]] && exit 1; done
+      fi
+      prev=$a
+    done
+    ;;
+  list-windows) cat "${STUB_TMUX_WINDOWS:-/dev/null}" ;;
+  list-clients) cat "${STUB_TMUX_CLIENTS:-/dev/null}" ;;
+  # Pane data: STUB_TMUX_PANES.<n> on the n-th call (last one repeats), else STUB_TMUX_PANES itself.
+  list-panes)
+    f=${STUB_TMUX_PANES:-/dev/null}
+    if [[ -n ${STUB_LOG:-} && -e $f.1 ]]; then
+      n=$(($(cat "$STUB_LOG.panes" 2>/dev/null || echo 0) + 1))
+      echo "$n" >"$STUB_LOG.panes"
+      while [[ $n -gt 1 && ! -e $f.$n ]]; do n=$((n - 1)); done
+      f=$f.$n
+    fi
+    cat "$f"
+    ;;
+  display-message) cat "${STUB_TMUX_DISPLAY:-/dev/null}" ;;
+esac
+exit 0

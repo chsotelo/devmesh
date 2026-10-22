@@ -1,0 +1,45 @@
+name: Bug report
+description: Report a reproducible problem
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include secrets, keys, IP addresses, or domains. For security issues, see SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: devmesh version
+      placeholder: "0.6.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device type
+      options:
+        - Linux machine
+        - macOS
+        - Android (Termux)
+        - Hub
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and logs
+      description: Redact anything sensitive.
+    validations:
+      required: true

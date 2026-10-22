@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Test stub: logs each argument on its own line.
+if [[ -n ${STUB_LOG:-} ]]; then
+  printf 'termux-notification\n'
+  printf 'arg:%s\n' "$@"
+fi >>"$STUB_LOG"
+exit 0

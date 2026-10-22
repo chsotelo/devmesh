@@ -1,0 +1,9 @@
+{
+  "_comment": "Optional (R16): merge into ~/.claude/settings.json on machines that run Claude Code. The terminal list then shows working / waiting / idle per tab. Any other tool can call `dm agent <state>` the same way.",
+  "hooks": {
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "dm agent working" }] }],
+    "Notification": [{ "hooks": [{ "type": "command", "command": "dm agent waiting" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "dm agent idle" }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "dm agent clear" }] }]
+  }
+}

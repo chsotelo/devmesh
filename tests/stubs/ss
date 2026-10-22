@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Test stub for ss -Hltn "sport = :PORT": ports listed in STUB_SS_PORTS are listening.
+args="$*"
+port=${args##*:}
+for p in ${STUB_SS_PORTS:-}; do
+  [[ $p == "$port" ]] && echo "LISTEN 0 128 127.0.0.1:$p 0.0.0.0:*"
+done
+exit 0

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Test stub for curl: record argv; with "-K -" also record the config read from stdin.
+[[ -n ${STUB_LOG:-} ]] || exit 0
+printf 'curl %s\n' "$*" >>"$STUB_LOG"
+for a in "$@"; do
+  if [[ $prev == -K && $a == - ]]; then
+    sed 's/^/curl-config /' >>"$STUB_LOG"
+  fi
+  prev=$a
+done
+exit 0

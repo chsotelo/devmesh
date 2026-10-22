@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# devmesh — hub control CLI. Runs as root on the hub.
+set -euo pipefail
+
+DEVMESH_LIB=${DEVMESH_LIB:-/usr/local/lib/devmesh}
+for _lib in common registry render trust invite enroll devices status admin backup; do
+  # shellcheck source=/dev/null
+  source "$DEVMESH_LIB/$_lib.sh"
+done
+unset _lib
+
+usage() {
+  cat >&2 <<'EOF'
+usage: devmesh <command> [args]
+
+  invite <name> [--lan L] [--watch-hub] [--owner]   one-use join line (any device)
+  remove <name> --confirm <name>                     revoke a device (or cancel its invite)
+  ls                                                 devices, handshakes, tunnels, invites
+  hosts | ssh-config | known-hosts | keys            exports for clients
+  pending | signers | bundle                         approvals: devices waiting, approvers, signed key bundle
+  owner <device>                                     first approver among already enrolled devices (migration)
+  dist [version]                                     client bundle (tar.gz) for "dm update"
+  apply                                              re-render everything from the registry
+  gc | check                                         timers: expire invites | alert on machines down
+  backup | backup-latest | restore <state.tar.gz>    encrypted state backup / restore
+  version
+EOF
+  exit 2
+}
+
+main() {
+  local cmd=${1:-}
+  [[ -n $cmd ]] || usage
+  shift
+  require_root
+  load_hub_conf
+  reg_init
+  case $cmd in
+    invite) cmd_invite "$@" ;;
+    remove) cmd_remove "$@" ;;
+    ls) cmd_ls ;;
+    hosts) cmd_hosts ;;
+    ssh-config) cmd_ssh_config ;;
+    known-hosts) cmd_known_hosts ;;
+    keys) cmd_keys ;;
+    pending) cmd_pending ;;
+    signers) cmd_signers ;;
+    bundle) cmd_bundle ;;
+    owner) cmd_owner "$@" ;;
+    dist) cmd_dist "$@" ;;
+    apply) apply_all ;;
+    gc) cmd_gc ;;
+    check) cmd_check ;;
+    backup) cmd_backup ;;
+    backup-latest) cmd_backup_latest ;;
+    restore) cmd_restore "$@" ;;
+    version) devmesh_version ;;
+    _enroll) cmd_enroll "$@" ;;
+    _ssh) cmd_admin_ssh "$@" ;;
+    -h | --help | help) usage ;;
+    *) die "unknown command: $cmd" ;;
+  esac
+}
+
+main "$@"

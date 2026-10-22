@@ -1,0 +1,111 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck v0.10.0 and shfmt v3.10.0
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/shellcheck.tar.xz \
+            https://github.com/koalaman/shellcheck/releases/download/v0.10.0/shellcheck-v0.10.0.linux.x86_64.tar.xz
+          tar -xJf /tmp/shellcheck.tar.xz -C /tmp
+          sudo install -m 0755 /tmp/shellcheck-v0.10.0/shellcheck /usr/local/bin/shellcheck
+          curl -fsSL -o /tmp/shfmt \
+            https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_amd64
+          sudo install -m 0755 /tmp/shfmt /usr/local/bin/shfmt
+          shellcheck --version
+          shfmt --version
+      - name: Lint
+        run: |
+          make lint
+
+  go:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tui/go.mod
+          cache-dependency-path: tui/go.sum
+      - name: Vet
+        working-directory: tui
+        run: go vet ./...
+      - name: Format
+        working-directory: tui
+        run: test -z "$(gofmt -l .)"
+      - name: Test
+        working-directory: tui
+        run: go test ./...
+      - name: Build every dm-tui target
+        run: make tui-all
+
+  unit-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y bats tmux fzf age wireguard-tools
+          curl -fsSL -o /tmp/shellcheck.tar.xz \
+            https://github.com/koalaman/shellcheck/releases/download/v0.10.0/shellcheck-v0.10.0.linux.x86_64.tar.xz
+          tar -xJf /tmp/shellcheck.tar.xz -C /tmp
+          sudo install -m 0755 /tmp/shellcheck-v0.10.0/shellcheck /usr/local/bin/shellcheck
+          curl -fsSL -o /tmp/shfmt \
+            https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_amd64
+          sudo install -m 0755 /tmp/shfmt /usr/local/bin/shfmt
+      - name: Check
+        run: make check
+
+  unit-macos:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: brew install bash bats-core fzf tmux shellcheck shfmt age wireguard-tools
+      - name: Check
+        run: make check
+
+  integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Integration
+        run: make integration
+
+  docker-hub:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Buildx
+        if: hashFiles('docker/hub/Dockerfile') != ''
+        uses: docker/setup-buildx-action@v3
+      - name: Build hub image
+        if: hashFiles('docker/hub/Dockerfile') != ''
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/hub/Dockerfile
+          push: false
+          load: true
+          tags: devmesh-hub:ci

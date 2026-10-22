@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Test stub: record the call, succeed.
+[[ -n ${STUB_LOG:-} ]] && printf 'logger %s\n' "$*" >>"$STUB_LOG"
+exit 0

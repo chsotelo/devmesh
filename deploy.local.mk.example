@@ -1,0 +1,6 @@
+# Copy to deploy.local.mk (ignored by git) and fill in; then "make hub" needs no arguments.
+HOST = root@203.0.113.10
+HUB_HOST = hub.example.com
+ACME_EMAIL = you@example.com
+BACKUP_RECIPIENT = age1...
+SSH = ssh -i ~/.ssh/id_ed25519

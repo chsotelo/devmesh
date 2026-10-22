@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Test stub for wg(8). Deterministic pubkey; state via STUB_* env/files.
+set -euo pipefail
+log() { [[ -n ${STUB_LOG:-} ]] && printf 'wg %s\n' "$*" >>"$STUB_LOG"; return 0; }
+case ${1:-} in
+  genkey) head -c 32 /dev/urandom | base64 ;;
+  pubkey) openssl dgst -sha256 -binary | base64 ;;
+  show)
+    if [[ ${3:-} == latest-handshakes ]]; then
+      cat "${STUB_WG_HANDSHAKES:-/dev/null}" 2>/dev/null || true
+    else
+      [[ ${STUB_WG_UP:-0} == 1 ]]
+    fi
+    ;;
+  syncconf | set) log "$*" ;;
+  *) echo "wg stub: unsupported $*" >&2; exit 1 ;;
+esac

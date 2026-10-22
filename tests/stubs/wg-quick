@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Test stub for wg-quick strip: drop wg-quick-only keys.
+set -euo pipefail
+[[ ${1:-} == strip ]] || { echo "wg-quick stub: unsupported $*" >&2; exit 1; }
+grep -Ev '^(Address|PostUp|PostDown|MTU|DNS) ' "$DEVMESH_WG_DIR/$2.conf"

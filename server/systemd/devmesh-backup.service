@@ -1,0 +1,6 @@
+[Unit]
+Description=devmesh: encrypted state backup (age)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/devmesh backup

@@ -1,0 +1,14 @@
+[Unit]
+Description=devmesh reverse SSH tunnel to the hub (path B)
+Wants=network-online.target
+After=network-online.target
+# Never give up: the hub may be down for a while or moving to a new VPS.
+StartLimitIntervalSec=0
+
+[Service]
+ExecStart=/usr/local/sbin/devmesh-node tunnel
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

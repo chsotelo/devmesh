@@ -1,0 +1,98 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tui/go.mod
+          cache-dependency-path: tui/go.sum
+      - name: Build dm-tui for every supported OS/arch
+        run: make tui-all VERSION="${GITHUB_REF_NAME#v}"
+      - name: Build tarball and SHA256SUMS
+        env:
+          DM_RELEASE_TUI: "0" # already built above
+        run: scripts/release.sh "${GITHUB_REF_NAME#v}" dist
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/devmesh-*.tar.gz
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          prerelease: ${{ contains(github.ref_name, '-rc') }}
+
+  verify:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      attestations: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download release assets
+        run: gh release download "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" -D dist -p 'devmesh-*.tar.gz' -p SHA256SUMS
+      - name: Verify checksums
+        run: cd dist && sha256sum -c SHA256SUMS
+      - name: Verify provenance attestation
+        run: gh attestation verify dist/devmesh-*.tar.gz -R "$GITHUB_REPOSITORY"
+
+  image:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read version
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >>"$GITHUB_OUTPUT"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tui/go.mod
+          cache-dependency-path: tui/go.sum
+      - name: Build dm-tui (the hub image serves it to "dm update")
+        run: make tui-all VERSION="${{ steps.ver.outputs.version }}"
+      - name: Set up QEMU
+        if: hashFiles('docker/hub/Dockerfile') != ''
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Buildx
+        if: hashFiles('docker/hub/Dockerfile') != ''
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        if: hashFiles('docker/hub/Dockerfile') != ''
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push hub image
+        if: hashFiles('docker/hub/Dockerfile') != ''
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/hub/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/devmesh-hub:${{ steps.ver.outputs.version }}

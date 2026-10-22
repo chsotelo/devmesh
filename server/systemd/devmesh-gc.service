@@ -1,0 +1,6 @@
+[Unit]
+Description=devmesh: expire unused enrollment codes
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/devmesh gc

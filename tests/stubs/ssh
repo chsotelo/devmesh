@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Test stub for ssh: replies from $STUB_SSH_DIR/<host>/<cmd words joined by _>.
+# Hosts in STUB_SSH_DOWN fail with 255 (unreachable); every call is logged.
+[[ -n ${STUB_LOG:-} ]] && printf 'ssh %s\n' "$*" >>"$STUB_LOG"
+host="" gflag=0
+for a in "$@"; do [[ $a == -G ]] && gflag=1; done
+while (($#)); do
+  case $1 in
+    -[oipLRWJFlbcDEemQSw]) shift 2 ;;
+    -[tNfqTAaxX46nvCGKkMsVYg]*) shift ;;
+    *) host=$1; shift; break ;;
+  esac
+done
+for d in ${STUB_SSH_DOWN:-}; do [[ $d == "$host" ]] && exit 255; done
+for d in ${STUB_SSH_DENY:-}; do
+  [[ $d == "$host" ]] && {
+    echo "$host: Permission denied (publickey)." >&2
+    exit 255
+  }
+done
+# Enrollment: hand stdin to the local test hub, like the real forced command would.
+if [[ $host == enroll@* && -n ${STUB_ENROLL_CMD:-} ]]; then exec bash -c "$STUB_ENROLL_CMD"; fi
+# Hub admin channel: hand the command (and stdin) to the local test hub's forced command.
+if [[ $host == hub-admin && -n ${STUB_ADMIN_CMD:-} ]]; then SSH_ORIGINAL_COMMAND="$*" exec bash -c "$STUB_ADMIN_CMD"; fi
+if ((gflag)); then
+  [[ -e ${STUB_SSH_DIR:-/nonexistent}/$host/_G ]] && cat "$STUB_SSH_DIR/$host/_G"
+  exit 0
+fi
+[[ $# -eq 0 || $1 == true ]] && exit 0
+key=$(IFS=_ && printf '%s' "$*")
+file="${STUB_SSH_DIR:-/nonexistent}/$host/$key"
+[[ -e $file ]] && cat "$file"
+exit 0

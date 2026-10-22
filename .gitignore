@@ -1,0 +1,10 @@
+backups/
+*.age
+*.tar.gz
+state/
+.DS_Store
+PLAN-OSS.md
+dist/
+deploy.local.mk
+.claude/
+client/bin/dm-tui-*

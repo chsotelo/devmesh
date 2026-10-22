@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# dm — devmesh client: control every machine from any device.
+# macOS ships bash 3.2: re-run under Homebrew's bash 5 (this block is bash-3 safe).
+if [ "${BASH_VERSINFO:-0}" -lt 4 ]; then
+  for b in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+    [ -x "$b" ] && exec "$b" "$0" "$@"
+  done
+  echo "dm needs bash >= 4 (brew install bash)" >&2
+  exit 1
+fi
+set -euo pipefail
+export DM_SELF
+DM_SELF=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")
+
+dm_share_dir() {
+  local here
+  if [[ -n ${DM_SHARE:-} ]]; then
+    printf '%s\n' "$DM_SHARE"
+    return
+  fi
+  here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+  if [[ -d $here/../lib && -f $here/../lib/dm_core.sh ]]; then
+    (cd "$here/.." && pwd) # running from a checkout: client/bin/dm
+  elif [[ -d ${PREFIX:-/nonexistent}/share/devmesh ]]; then
+    printf '%s/share/devmesh\n' "$PREFIX"
+  elif [[ -d $HOME/.local/share/devmesh/lib ]]; then
+    printf '%s/.local/share/devmesh\n' "$HOME" # macOS (user-level install)
+  else
+    printf '/usr/local/share/devmesh\n'
+  fi
+}
+
+for _lib in dm_core dm_remote dm_terms dm_files dm_admin dm_repoint dm_trust dm_ui dm_app dm_workspace dm_watch dm_vscode tui_target dm_feed; do
+  # shellcheck source=/dev/null
+  source "$(dm_share_dir)/lib/$_lib.sh"
+done
+unset _lib
+
+dm_dispatch() {
+  local cmd=${1:-workspace}
+  shift || true
+  case $cmd in
+    workspace | menu | terms | t) dm_ws_start ;;
+    panel) dm_app_main ;;
+    _app) dm_app_dispatch "$@" ;;
+    _tab) dm_ws_tab "$@" ;;
+    list) dm_terms ;;
+    new) dm_ui_new "$@" ;;
+    go | m) dm_go "$@" ;;
+    close) dm_close ;;
+    who) dm_who ;;
+    send) dm_send "$@" ;;
+    fetch) dm_fetch ;;
+    port) dm_port "$@" ;;
+    mesh) dm_mesh ;;
+    devices | ls) dm_devices ;;
+    add) dm_add "$@" ;;
+    rm) dm_rm ;;
+    wake) dm_wake "$@" ;;
+    refresh) dm_refresh ;;
+    repoint) dm_repoint "$@" ;;
+    approve) dm_approve "$@" ;;
+    trust) dm_trust "$@" ;;
+    update) dm_update ;;
+    version) dm_version ;;
+    agent) dm_agent "$@" ;;
+    watch) dm_watch "$@" ;;
+    vscode) dm_vscode "$@" ;;
+    help | -h | --help) dm_help ;;
+    # Machine-side helpers, called over SSH by other devices.
+    _preview) dm_ui_preview "$@" ;;
+    _feed) dm_feed ;;
+    _shot) dm_feed_shot "$@" ;;
+    _proj) dm_feed_projects "$@" ;;
+    _i18n) dm_feed_i18n ;;
+    _new) dm_feed_new "$@" ;;
+    _who) dm_remote_who ;;
+    _capture) dm_remote_capture "$@" ;;
+    _clients) dm_remote_clients "$@" ;;
+    _projects) dm_remote_projects ;;
+    _attach) dm_remote_attach "$@" ;;
+    _has) dm_remote_has "$@" ;;
+    _kill) dm_remote_kill "$@" ;;
+    _ports) dm_remote_ports ;;
+    _recent) dm_remote_recent ;;
+    _dest) dm_remote_dest "$@" ;;
+    _wol) dm_remote_wol "$@" ;;
+    _watch) dm_remote_watch ;;
+    _key) dm_remote_key "$@" ;;
+    _notify-act) dm_watch_act "$@" ;;
+    _vscode-shell) dm_vscode_shell ;;
+    *) dm_die "unknown command: $cmd (try: dm help)" ;;
+  esac
+}
+
+dm_main() {
+  # "agent" runs from tool hooks on every prompt, _vscode-shell starts every VS Code
+  # terminal: both stay free of config and network.
+  if [[ ${1:-} != agent && ${1:-} != help && ${1:-} != version && ${1:-} != _vscode-shell ]]; then
+    dm_load_conf
+  fi
+  dm_dispatch "$@"
+}
+
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+  dm_main "$@"
+fi

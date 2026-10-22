@@ -1,0 +1,6 @@
+[Unit]
+Description=devmesh: re-resolve the hub endpoint when the handshake is stale
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/devmesh-node reresolve

@@ -1,0 +1,8 @@
+[Unit]
+Description=devmesh: sync authorized client keys from the hub
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/devmesh-node keys-sync

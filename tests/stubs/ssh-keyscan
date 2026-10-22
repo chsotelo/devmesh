@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Test stub for ssh-keyscan: logs argv, answers with the key in $STUB_KEYSCAN_KEY ("type base64")
+# as the host-key line for the last argument (the host). Prints nothing when unset.
+[[ -n ${STUB_LOG:-} ]] && printf 'ssh-keyscan %s\n' "$*" >>"$STUB_LOG"
+[[ -n ${STUB_KEYSCAN_KEY:-} ]] || exit 0
+printf '%s %s\n' "${!#}" "$STUB_KEYSCAN_KEY"
