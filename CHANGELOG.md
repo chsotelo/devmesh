@@ -7,6 +7,13 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-23
+
+### Added
+
+- Hub: optional `HUB_OPEN_PORTS` in `hub.conf` (`8730 9000/udp`) opens services running on
+  the hub to the mesh only (chain `DEVMESH-HUB-IN`). Re-apply with `devmesh-fw up devmesh`.
+
 ## [0.9.0] - 2026-10-22
 
 ### Added

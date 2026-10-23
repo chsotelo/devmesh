@@ -50,9 +50,15 @@ Each device verifies against its local `allowed_signers` (`ssh-keygen -Y verify`
 | 2222/tcp | devmesh's own sshd: restricted accounts only (`enroll`, `dmadmin`, `tunnel`), keys only, no shell |
 | 443/tcp (domain mode) or 8443/tcp (IP mode) | join scripts and ntfy |
 | 80/tcp (domain mode, optional) | Let's Encrypt challenge |
+| `HUB_OPEN_PORTS` (optional, from the mesh only) | services running on the hub itself that the owner opens on purpose, e.g. `HUB_OPEN_PORTS="8730 9000/udp"` in `hub.conf` (TCP by default, `port/udp` for UDP) |
 
-From the mesh (interface `devmesh`) the hub accepts only established traffic, ping and 2222/tcp
-(chain `DEVMESH-HUB-IN`), and Docker's `DOCKER-USER` drops what enters from the mesh and is
+From the mesh (interface `devmesh`) the hub accepts only established traffic, ping, 2222/tcp and
+the ports listed in `HUB_OPEN_PORTS` (chain `DEVMESH-HUB-IN`; invalid entries are skipped with a
+warning). Those rules apply to INPUT from the `devmesh` interface only, so an opened port is
+reachable from the mesh and never from the internet. A service on the hub that has no encryption of
+its own ends at the hub itself: nothing crosses the mesh decrypted beyond the WireGuard tunnel that
+terminates there. Apply a change with `devmesh-fw up devmesh` (idempotent, the tunnel stays up).
+The hub's `DOCKER-USER` rule, and Docker's `DOCKER-USER` drops what enters from the mesh and is
 routed anywhere else, so containers published on the VPS are not reachable through `10.73.0.1`.
 Forwarding between devices stays open on the hub: the filter is on each machine.
 

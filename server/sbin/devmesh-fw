@@ -3,7 +3,9 @@
 # 1. Forwarding only between devmesh peers (iface -> same iface). On Docker hosts the rules
 #    must live in DOCKER-USER: Docker sets FORWARD to DROP and evaluates its chains first.
 #    There, "-i iface ! -o iface -j DROP" keeps published containers away from the mesh.
-# 2. INPUT from the mesh: only established traffic, ping and the devmesh sshd port.
+# 2. INPUT from the mesh: only established traffic, ping, the devmesh sshd port and the
+#    optional HUB_OPEN_PORTS from hub.conf (services on the hub itself, mesh-only).
+#    "devmesh-fw up <iface>" is idempotent (flush + rebuild), so it also re-applies the rules.
 # Every rule is either in DEVMESH-HUB-IN or matches the devmesh interface; nothing else is touched.
 set -euo pipefail
 
@@ -32,6 +34,28 @@ hub_ssh_port() {
   fi
 }
 
+# Last value of KEY in hub.conf, quotes stripped.
+hub_conf_value() {
+  local conf=${DEVMESH_ETC:-/etc/devmesh}/hub.conf
+  [[ -r $conf ]] && sed -n "s/^$1=//p" "$conf" | tail -n 1 | tr -d "\"'" || true
+}
+
+# HUB_OPEN_PORTS: "port" (tcp) or "port/udp" entries separated by spaces or commas.
+# Prints "proto port" per valid entry; invalid ones are skipped with a warning.
+hub_open_ports() {
+  local entry port proto
+  for entry in $(hub_conf_value HUB_OPEN_PORTS | tr ',' ' '); do
+    port=${entry%%/*}
+    proto=tcp
+    [[ $entry == */* ]] && proto=${entry#*/}
+    if [[ $port =~ ^[0-9]{1,5}$ ]] && ((10#$port >= 1 && 10#$port <= 65535)) && [[ $proto == tcp || $proto == udp ]]; then
+      printf '%s %s\n' "$proto" "$((10#$port))"
+    else
+      echo "devmesh-fw: ignoring invalid HUB_OPEN_PORTS entry '$entry'" >&2
+    fi
+  done
+}
+
 case $action in
   up)
     iptables -C "$chain" "${rule[@]}" 2>/dev/null || iptables -I "$chain" 1 "${rule[@]}"
@@ -43,6 +67,9 @@ case $action in
     iptables -A "$hub_chain" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
     iptables -A "$hub_chain" -p icmp --icmp-type echo-request -j ACCEPT
     iptables -A "$hub_chain" -p tcp --dport "$(hub_ssh_port)" -j ACCEPT
+    while read -r proto port; do
+      iptables -A "$hub_chain" -p "$proto" --dport "$port" -j ACCEPT
+    done < <(hub_open_ports)
     iptables -A "$hub_chain" -j DROP
     iptables -C INPUT "${hook_rule[@]}" 2>/dev/null || iptables -I INPUT 1 "${hook_rule[@]}"
     ;;

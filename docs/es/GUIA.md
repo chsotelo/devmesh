@@ -309,6 +309,23 @@ Elige el dispositivo y escribe su nombre para confirmar. En ese mismo instante p
 
 ---
 
+### Abrir un servicio del propio hub a la malla
+
+Para que todos los dispositivos lleguen a un servicio que corre **en el hub** (por ejemplo un
+tablero de tareas en `10.73.0.1:8730`), agrega el puerto a `/etc/devmesh/hub.conf` y reaplica las
+reglas sin tumbar el túnel (como root, en el hub):
+
+```bash
+# /etc/devmesh/hub.conf: TCP por defecto, "puerto/udp" para UDP; separa con espacios o comas
+HUB_OPEN_PORTS="8730 9000/udp"
+
+devmesh-fw up devmesh              # idempotente: reconstruye la cadena DEVMESH-HUB-IN
+iptables -S DEVMESH-HUB-IN         # verifica
+```
+
+Solo se abre hacia la malla (interfaz `devmesh`), nunca hacia internet. Las entradas inválidas se
+ignoran con un aviso. El servicio debe escuchar en `10.73.0.1` o en `0.0.0.0`.
+
 ## 6. Mantenimiento (solo cuando haga falta)
 
 | Tarea | Cómo |

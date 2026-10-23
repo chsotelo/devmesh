@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 # ls / check (alerts) / backup + restore / firewall hook.
 
+bats_require_minimum_version 1.5.0
 load helpers
 
 setup() {
@@ -175,4 +176,56 @@ DOCKER-USER -j RETURN" ]
   STUB_DOCKER=1 bash "$REPO/server/sbin/devmesh-fw" up devmesh
   STUB_DOCKER=1 bash "$REPO/server/sbin/devmesh-fw" down devmesh
   ! grep '^iptables ' "$STUB_LOG" | grep -E ' -(D|F|X|N|A|I) ' | grep -viE 'devmesh'
+}
+
+hub_in_rules() { grep '^DEVMESH-HUB-IN ' "$STUB_IPT"; }
+
+@test "devmesh-fw: no HUB_OPEN_PORTS keeps exactly the base rule set" {
+  printf 'HUB_OPEN_PORTS=\n' >"$DEVMESH_ETC/hub.conf"
+  bash "$REPO/server/sbin/devmesh-fw" up devmesh
+  [ "$(hub_in_rules)" = "DEVMESH-HUB-IN -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+DEVMESH-HUB-IN -p icmp --icmp-type echo-request -j ACCEPT
+DEVMESH-HUB-IN -p tcp --dport 2222 -j ACCEPT
+DEVMESH-HUB-IN -j DROP" ]
+}
+
+@test "devmesh-fw: HUB_OPEN_PORTS adds ACCEPT rules after sshd and before DROP" {
+  printf 'HUB_OPEN_PORTS="8730 9000/udp"\n' >"$DEVMESH_ETC/hub.conf"
+  bash "$REPO/server/sbin/devmesh-fw" up devmesh
+  [ "$(hub_in_rules)" = "DEVMESH-HUB-IN -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+DEVMESH-HUB-IN -p icmp --icmp-type echo-request -j ACCEPT
+DEVMESH-HUB-IN -p tcp --dport 2222 -j ACCEPT
+DEVMESH-HUB-IN -p tcp --dport 8730 -j ACCEPT
+DEVMESH-HUB-IN -p udp --dport 9000 -j ACCEPT
+DEVMESH-HUB-IN -j DROP" ]
+}
+
+@test "devmesh-fw: HUB_OPEN_PORTS accepts commas and the last occurrence wins" {
+  printf 'HUB_OPEN_PORTS=1111\nHUB_OPEN_PORTS='"'"'8730,9001/tcp'"'"'\n' >"$DEVMESH_ETC/hub.conf"
+  bash "$REPO/server/sbin/devmesh-fw" up devmesh
+  grep -qxF "DEVMESH-HUB-IN -p tcp --dport 8730 -j ACCEPT" "$STUB_IPT"
+  grep -qxF "DEVMESH-HUB-IN -p tcp --dport 9001 -j ACCEPT" "$STUB_IPT"
+  ! grep -q -- '--dport 1111 ' "$STUB_IPT"
+}
+
+@test "devmesh-fw: invalid HUB_OPEN_PORTS entries are skipped with a warning and exit 0" {
+  printf 'HUB_OPEN_PORTS="0 70000 abc 8730/sctp 8730"\n' >"$DEVMESH_ETC/hub.conf"
+  run --separate-stderr bash "$REPO/server/sbin/devmesh-fw" up devmesh
+  [ "$status" -eq 0 ]
+  for bad in 0 70000 abc 8730/sctp; do [[ $stderr == *"$bad"* ]]; done
+  [ "$(hub_in_rules | grep -c -- '--dport')" -eq 2 ]
+  grep -qxF "DEVMESH-HUB-IN -p tcp --dport 8730 -j ACCEPT" "$STUB_IPT"
+  [ "$(hub_in_rules | tail -n 1)" = "DEVMESH-HUB-IN -j DROP" ]
+}
+
+@test "devmesh-fw: re-running up does not duplicate the open-port rules" {
+  printf 'HUB_OPEN_PORTS="8730 9000/udp"\n' >"$DEVMESH_ETC/hub.conf"
+  bash "$REPO/server/sbin/devmesh-fw" up devmesh
+  bash "$REPO/server/sbin/devmesh-fw" up devmesh
+  [ "$(hub_in_rules | wc -l)" -eq 6 ]
+  [ "$(grep -c '^INPUT ' "$STUB_IPT")" -eq 1 ]
+  # Removing the key and re-applying drops the rule again.
+  : >"$DEVMESH_ETC/hub.conf"
+  bash "$REPO/server/sbin/devmesh-fw" up devmesh
+  [ "$(hub_in_rules | wc -l)" -eq 4 ]
 }
