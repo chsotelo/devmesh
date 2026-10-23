@@ -200,3 +200,55 @@ setup() {
   [ -z "$output" ]
   for range in menu add delete exit; do grep -q "range=user|$range" "$REPO/client/tmux/layout.conf"; done
 }
+
+@test "dm inside the workspace itself opens nothing" {
+  TMUX=/tmp/tmux-501/devmesh,1,0 run dm_ws_start
+  [ "$status" -eq 0 ]
+  [[ $output == *"already the devmesh panel"* ]]
+  ! grep -q "detach-client" "$STUB_LOG"
+}
+
+@test "dm inside a terminal another device is watching refuses to nest a panel" {
+  dm_client_origin() { echo tablet; }
+  tmux() {
+    printf 'tmux %s\n' "$*" >>"$STUB_LOG"
+    [[ $1 == display-message ]] && echo 4242
+    return 0
+  }
+  TMUX=/tmp/tmux-501/default,1,0 run dm_ws_start
+  [ "$status" -ne 0 ]
+  [[ $output == *"from tablet"* ]]
+  ! grep -q "detach-client" "$STUB_LOG"
+}
+
+@test "dm inside a local tmux hands the window over instead of nesting" {
+  dm_client_origin() { echo local; }
+  tmux() {
+    printf 'tmux %s\n' "$*" >>"$STUB_LOG"
+    [[ $1 == display-message ]] && echo 4242
+    return 0
+  }
+  TMUX=/tmp/tmux-501/default,1,0 run dm_ws_start
+  grep -q "tmux detach-client -E" "$STUB_LOG"
+}
+
+@test "a workspace left by an older dm is replaced by the layout, a current one is kept" {
+  dm_tui_bin() { echo /bin/true; }
+  tmux() {
+    printf 'tmux %s\n' "$*" >>"$STUB_LOG"
+    case $* in
+      *has-session*) [[ ! -e $BATS_TEST_TMPDIR/killed ]] ;;
+      *show-options*) echo "${STUB_LAYOUT-}" ;;
+      *kill-server*) : >"$BATS_TEST_TMPDIR/killed" ;;
+      *new-session* | *new-window* | *split-window*) echo @1 ;;
+      *display-message*) echo %1 ;;
+    esac
+  }
+  run dm_ly_start
+  grep -q "kill-server" "$STUB_LOG"
+  grep -q "set-option -t devmesh @dm_layout 1" "$STUB_LOG"
+  : >"$STUB_LOG"
+  rm -f "$BATS_TEST_TMPDIR/killed"
+  STUB_LAYOUT=1 run dm_ly_start
+  ! grep -q "kill-server" "$STUB_LOG"
+}

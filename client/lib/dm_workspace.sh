@@ -19,10 +19,33 @@ dm_ws_ensure_tmux() {
   return 1
 }
 
+# Inside a tmux that is not the workspace, opening the panel there would nest it: the
+# panel shows this machine's terminals, one of which is the one you are in, and so on.
+# - the workspace itself: nothing to open
+# - a terminal another device is looking at: refuse (the panel lives on that device)
+# - a local terminal (machines start every terminal in tmux): hand the real window over
+#   to the panel (detach-client -E); the local session keeps running
+dm_ws_in_tmux() {
+  local socket client origin
+  socket=${TMUX%%,*}
+  if [[ ${socket##*/} == "$DM_WS_SOCKET" ]]; then
+    dm_info "$M_WS_ALREADY"
+    return 0
+  fi
+  client=$(tmux display-message -p '#{client_pid}' 2>/dev/null)
+  origin=local
+  [[ $client =~ ^[0-9]+$ ]] && origin=$(dm_client_origin "$client")
+  if [[ $origin != local ]]; then
+    dm_info "$(dm_t "$M_WS_REMOTE" "$origin")"
+    return 1
+  fi
+  exec tmux detach-client -E "'$BASH' '$DM_SELF'"
+}
+
 # dm (no args): start or re-attach the workspace with the panel as its first tab.
 dm_ws_start() {
   if dm_ws_available; then
-    dm_app_main
+    dm_ws_in_tmux
     return
   fi
   if ! dm_ws_ensure_tmux; then
