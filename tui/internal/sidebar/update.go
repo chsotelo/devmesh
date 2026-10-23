@@ -57,6 +57,7 @@ func (m *Model) applyPoll(msg pollMsg) tea.Cmd {
 	m.online = found && machine.IsReachable()
 	selected := m.selectedSession()
 	m.rows = rowsOf(machine)
+	m.color = machine.Color
 	m.shown = msg.shown
 	if !m.loaded {
 		m.cursor = max(indexOf(m.rows, m.shown), 0)

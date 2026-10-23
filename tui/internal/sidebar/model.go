@@ -42,6 +42,7 @@ type Options struct {
 type Row struct {
 	Session string
 	Window  string
+	Command string
 	Agent   feed.AgentState
 }
 
@@ -58,6 +59,7 @@ type Model struct {
 	rows    []Row
 	cursor  int
 	shown   string
+	color   int
 	loaded  bool
 	online  bool
 	polling bool
@@ -139,12 +141,16 @@ func rowsOf(machine feed.Machine) []Row {
 		switch {
 		case !seen:
 			index[term.Session] = len(rows)
-			rows = append(rows, Row{Session: term.Session, Window: term.Window, Agent: term.Agent})
+			rows = append(rows, rowOf(term))
 		case term.Active:
-			rows[position] = Row{Session: term.Session, Window: term.Window, Agent: term.Agent}
+			rows[position] = rowOf(term)
 		}
 	}
 	return rows
+}
+
+func rowOf(term feed.Terminal) Row {
+	return Row{Session: term.Session, Window: term.Window, Command: term.Command, Agent: term.Agent}
 }
 
 func indexOf(rows []Row, session string) int {

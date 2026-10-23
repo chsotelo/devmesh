@@ -7,6 +7,14 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-10-23
+
+### Changed
+
+- Terminal list closer to VS Code: the `>_` icon takes the machine color and the running
+  program follows the name in gray (`api  claude`); the active machine tab is underlined;
+  the `+ 🗑 ✕ ☰` buttons are wider for touch.
+
 ## [0.9.3] - 2026-10-23
 
 ### Fixed

@@ -244,3 +244,28 @@ func TestActionErrorsShowOnTheLastLine(t *testing.T) {
 		t.Fatalf("view = %q", m.View())
 	}
 }
+
+func TestRowsShowTheProgramNextToTheNameLikeVSCode(t *testing.T) {
+	withCmd := func(session, command string) feed.Terminal {
+		terminal := term(session, "1", feed.AgentNone)
+		terminal.Command = command
+		return terminal
+	}
+	src := &fakeSource{snap: machine(feed.ReachOnline,
+		withCmd("api", "claude"), withCmd("a-long-session-name", "node")), shown: "api"}
+	m := loaded(t, src)
+	poll(m, src)
+
+	lines := strings.Split(m.View(), "\n")
+	if !strings.Contains(lines[0], "api  claude") {
+		t.Fatalf("program must follow the name: %q", lines[0])
+	}
+	if strings.Contains(lines[1], "node") {
+		t.Fatalf("no room for the program after a long name: %q", lines[1])
+	}
+	for _, line := range lines {
+		if got := lipgloss.Width(line); got > testWidth {
+			t.Fatalf("line wider than the pane (%d): %q", got, line)
+		}
+	}
+}

@@ -109,3 +109,12 @@ func MachineDot(color int, up bool) string {
 	}
 	return lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(color)).Render(Dot)
 }
+
+// MachineColor is the style of a machine's 256-color index (dim when unknown), used for the
+// terminal icons of that machine.
+func MachineColor(color int) lipgloss.Style {
+	if color <= 0 || color > 255 {
+		return lipgloss.NewStyle().Foreground(dim)
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(color))
+}
