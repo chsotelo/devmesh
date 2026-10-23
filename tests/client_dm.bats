@@ -322,3 +322,10 @@ setup() {
   export DM_NAME=tablet
   [ "$(dm_workspace_hosts | tr '\n' ' ')" = "tablet lap pc2 " ]
 }
+
+@test "remote who: no tmux server yet means no terminals, not an error" {
+  tmux() { return 1; }
+  run dm_remote_who
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}

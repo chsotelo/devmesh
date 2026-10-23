@@ -7,6 +7,14 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.7] - 2026-10-23
+
+### Fixed
+
+- A device without any tmux session yet (a phone, a fresh machine) showed as "offline":
+  `dm _who` failed under pipefail when tmux had no server. It now reports no terminals,
+  and the panel offers "+" to create the first one.
+
 ## [0.9.6] - 2026-10-23
 
 ### Fixed
