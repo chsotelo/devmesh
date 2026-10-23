@@ -3,7 +3,10 @@
 # so the GIF shows a realistic panel without real devices. Source it, then run "dm panel".
 DEMO_REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 DEMO_DIR=$(mktemp -d)
-export PATH="$DEMO_REPO/tests/stubs:$DEMO_REPO/client/bin:$PATH"
+# Only the ssh stub goes first in PATH: tmux stays the real one (the layout is real tmux).
+mkdir -p "$DEMO_DIR/bin"
+ln -s "$DEMO_REPO/tests/stubs/ssh" "$DEMO_DIR/bin/ssh"
+export PATH="$DEMO_DIR/bin:$DEMO_REPO/client/bin:$PATH"
 export DM_SHARE="$DEMO_REPO/client" DM_CACHE="$DEMO_DIR/cache" DM_CONF="$DEMO_DIR/node.conf"
 export STUB_SSH_DIR="$DEMO_DIR/ssh" DM_LANG=${DM_LANG:-en} HOME="$DEMO_DIR/home"
 mkdir -p "$DM_CACHE" "$HOME/.ssh"
@@ -31,5 +34,6 @@ demo_reply laptop dm__capture_api_1 $'$ claude\n\n  I updated the auth middlewar
 demo_reply laptop dm__capture_docs_1 $'$ claude\n\n  ● Writing docs/guide.md…\n'
 demo_reply laptop dm__capture_web_1 $'$ npm run dev\n\n  VITE v6  ready in 312 ms\n  ➜  Local: http://localhost:5173/\n'
 demo_reply desktop dm__capture_main_1 $'~ $ ls\nnotes.md  src  tests\n~ $ uptime\n up 12 days, 3:41\n~ $ \n'
+demo_reply laptop dm__capture_mobile_1 $'$ cd ~/PROJECTS/mobile\n$ claude\n\n  ● Reading the project files…\n'
 demo_reply laptop dm__projects $'api\ndocs\nweb\nmobile\n'
 unset t demo_now

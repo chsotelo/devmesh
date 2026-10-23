@@ -33,7 +33,7 @@ is a small server you own.
 | Hub | Ubuntu 20.04+ or Debian 11+ (native install), or any Linux with Docker. 1 vCPU, 512 MB. UDP 51820 and TCP 2222 open, plus TCP 443 (domain mode) or TCP 8443 (IP mode). A domain also needs port 80 for the Let's Encrypt challenge |
 | Machines | Linux with systemd, or macOS 13+ with Homebrew |
 | Phone / tablet | Android with Termux from F-Droid |
-| Panel | tmux for the tabbed workspace. The panel is `dm-tui`, a prebuilt binary that ships with the client (macOS, Linux, Termux); without one, or with `DM_TUI=0`, `dm` uses the fzf panel (fzf 0.66 or newer; older fzf: classic menu) |
+| Panel | tmux 3.2 or newer for the workspace. The list is `dm-tui`, a prebuilt binary that ships with the client (macOS, Linux, Termux); without it, with an older tmux, or with `DM_UI=fzf`, `dm` uses the fzf panel (fzf 0.66 or newer; older fzf: classic menu) |
 
 ## Install the hub
 
@@ -82,7 +82,34 @@ import a WireGuard config into the WireGuard app.
 
 ## Use the panel
 
-`dm` opens a tabbed workspace: the first tab is the panel, each open terminal gets a tab.
+`dm` opens the terminal panel of VS Code, on tmux: **a tab per machine on top (the device
+selector), the machine's terminals as a list on the left, the real terminal on the right.**
+
+```
+ devmesh │ ● laptop  desktop  ○ builder                          + │ 🗑 │ ✕
+▎ >_ api              ● │ $ claude
+  >_ web                │   I updated the auth middleware and added tests.
+  >_ docs             ● │   Edit src/auth.ts?
+```
+
+- Top bar: the active machine is bright with its color dot, the rest gray, an off machine shows
+  `○`. Click or tap a tab to switch.
+- Left list: one row per terminal with a dot for the agent in it (yellow waiting, blue working,
+  green idle). Click or `enter` shows it on the right; arrows or `j`/`k` move; it refreshes
+  every 3 s.
+- Buttons: `+` new terminal (asks for a name), `🗑` delete the terminal on screen (asks first),
+  `✕` leave (everything keeps running; `dm` re-attaches to the same place). Keys: `Ctrl+a +`,
+  `Ctrl+a x`, `Ctrl+a d`.
+- Under 70 columns (phone) the list is hidden and the terminal fills the screen; `☰` / `Ctrl+a s`
+  swaps to the list and back.
+- `DM_UI=cards dm` opens the previous card panel (below), `DM_UI=fzf dm` the fzf one; both are
+  also used automatically when there is no `dm-tui` binary or tmux is older than 3.2.
+- For screenshots and tests, `DM_DEMO=1` makes each terminal pane print the screen the ssh stub
+  returns instead of connecting (`docs/demo/run.sh`).
+
+### Card panel (`DM_UI=cards`)
+
+The first tab is the panel, each open terminal gets a tab.
 The panel is an app-like screen made for touch: every machine is a section and every
 terminal is a card with its agent state (working, waiting, idle), who is attached, the last
 activity and a **live thumbnail of its screen**. The grid adapts to the screen: one column on
@@ -126,13 +153,13 @@ buttons; the wheel scrolls.
 
 The panel (`dm-tui`) only draws: everything that touches a machine still goes through
 `dm`. The panel is English by default. Spanish: `DM_LANG=es dm` (or a `LANG=es_*` locale).
-`DM_TUI=0 dm` runs the fzf panel instead.
+`DM_UI=fzf dm` (or `DM_TUI=0 dm`) runs the fzf panel instead.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `dm` | workspace: the panel plus one tab per terminal |
+| `dm` | workspace: a tab per machine, its terminals on the left, the terminal on the right |
 | `dm new [machine]` | new terminal, guided |
 | `dm list` / `dm who` | every terminal on every machine, as a list / a table |
 | `dm go [machine] [name]` | enter a terminal (default `main`) |

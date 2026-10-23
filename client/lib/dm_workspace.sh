@@ -5,7 +5,7 @@
 #   - each tab reconnects by itself when the connection drops
 # Without tmux at all (rare), dm falls back to opening terminals full screen.
 
-readonly DM_WS_SOCKET=devmesh
+readonly DM_WS_SOCKET=${DM_WS_SOCKET:-devmesh}
 
 dm_ws_available() { [[ -n ${TMUX:-} ]]; }
 
@@ -28,6 +28,11 @@ dm_ws_start() {
   if ! dm_ws_ensure_tmux; then
     dm_app_main
     return
+  fi
+  # The VS Code like layout is the default; DM_UI=cards keeps the card panel, DM_UI=fzf the fzf one.
+  [[ ${DM_UI:-layout} == fzf ]] && export DM_TUI=0
+  if dm_ly_ready; then
+    dm_ly_start || dm_die "could not start the workspace"
   fi
   local share
   share=$(dm_share_dir)

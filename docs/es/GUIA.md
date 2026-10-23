@@ -140,22 +140,31 @@ En cualquier dispositivo escribe:
 dm
 ```
 
-Todo pasa en **una sola pantalla con pestañas**:
+Se ve como el panel de terminales de VS Code: **una pestaña por máquina arriba, la lista de
+terminales de esa máquina a la izquierda y la terminal real a la derecha**.
 
 ```
- devmesh │ ☰ panel  ● mac:api  ● lap:api          ← toca una pestaña para cambiar
- ─────────────────────────────────────────────────
- (la terminal elegida, en vivo)
-
- mac │ api │ 0:PROJECTS:claude*            tablet  ← barra de la máquina: dónde estás
+ devmesh │ ● laptop  desktop  ○ builder                   + │ 🗑 │ ✕   ← máquinas (pestañas) y botones
+▎ >_ api              ● │ $ claude
+  >_ web                │   I updated the auth middleware…
+  >_ docs             ● │   Edit src/auth.ts?   (la terminal elegida, en vivo)
 ```
 
-- **La primera pestaña es el panel,** y siempre sigue ahí.
-- **Abrir una terminal crea su pestaña,** o salta a la que ya está abierta. No se cierra nada.
-- **Si se corta la conexión, la pestaña se reconecta sola.** Para cerrarla, presiona `q`.
-- **Salir:** `Ctrl+a d` deja todo corriendo, y la próxima vez que escribas `dm` vuelves al mismo lugar.
+- **Barra de arriba = selector de máquina.** La pestaña activa va brillante con el color de la
+  máquina; las demás en gris; una máquina apagada muestra `○`. Toca o haz clic para cambiar.
+- **Izquierda = terminales de la máquina,** una fila cada una, con un punto del agente que corre
+  en ella (amarillo esperando, azul trabajando, verde en reposo). Toca una fila (o `enter`) y se
+  muestra a la derecha; flechas o `j`/`k` para moverte; la lista se actualiza cada 3 segundos.
+- **Botones (arriba a la derecha):** `+` terminal nueva (escribes un nombre), `🗑` eliminar la
+  terminal en pantalla (pregunta antes), `✕` salir: todo sigue corriendo y el próximo `dm` te
+  devuelve al mismo lugar. Teclas: `Ctrl+a +`, `Ctrl+a x`, `Ctrl+a d`.
+- **Celular:** con menos de 70 columnas la lista se oculta y la terminal ocupa la pantalla; `☰`
+  (o `Ctrl+a s`) alterna entre la lista y la terminal, y al elegir una fila vuelves a la terminal.
+- **Si se corta la conexión, la terminal se reconecta sola.**
+- Requiere tmux 3.2 o superior y el binario `dm-tui`. Sin ellos, o con `DM_UI=cards` /
+  `DM_UI=fzf`, `dm` usa el panel de tarjetas / el de fzf que se describen a continuación.
 
-El panel (primera pestaña) está hecho para el tacto (un celular o una tablet vertical en Termux) y también funciona con teclado y mouse:
+Panel de tarjetas (`DM_UI=cards`): está hecho para el tacto (un celular o una tablet vertical en Termux) y también funciona con teclado y mouse:
 
 ```
  ‹ volver  devmesh 0.8.1 › laptop            [nueva] [↻] [enviar] [web]  <- botones: tócalos

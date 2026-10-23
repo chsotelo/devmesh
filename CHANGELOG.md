@@ -7,6 +7,22 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-10-23
+
+### Changed
+
+- `dm` now opens a VS Code like terminal panel on tmux (3.2+): the status bar is the machine
+  selector, each machine window has the list of its terminals on the left (`dm-tui sidebar`) and
+  the real remote terminal on the right; status buttons `+` new, `delete` and `exit`, a `☰`
+  button on phones (under 70 columns the terminal fills the screen). The card panel stays with
+  `DM_UI=cards` and the fzf panel with `DM_UI=fzf`; both are also the automatic fallback without
+  `dm-tui` or with tmux older than 3.2.
+
+### Added
+
+- `dm _ws <sub>` workspace commands (validated, used by the layout) and `dm _feed HOST`.
+- `DM_DEMO=1` demo hook and `DM_WS_SOCKET` to run a second workspace (screenshots, tests).
+
 ## [0.9.1] - 2026-10-23
 
 ### Added

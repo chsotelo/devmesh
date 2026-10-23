@@ -1,17 +1,17 @@
 # shellcheck shell=bash
 # Terminals across machines: list (color + global ID), enter, create on a chosen machine, close.
 
-# dm_collect: query every machine in parallel.
+# dm_collect [HOST]: query every machine (or just HOST) in parallel.
 # Output: host<TAB>OK<TAB><who fields...> | host<TAB>EMPTY | host<TAB>OFFLINE
 dm_collect() (
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
   local h
-  for h in $(dm_machines); do
+  for h in ${1:-$(dm_machines)}; do
     (dm_run "$h" dm _who >"$tmp/$h.out" 2>/dev/null && : >"$tmp/$h.ok") &
   done
   wait
-  for h in $(dm_machines); do
+  for h in ${1:-$(dm_machines)}; do
     if [[ ! -e $tmp/$h.ok ]]; then
       printf '%s\tOFFLINE\n' "$h"
     elif [[ ! -s $tmp/$h.out ]]; then

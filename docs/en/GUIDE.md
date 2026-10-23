@@ -148,24 +148,31 @@ On any device type:
 dm
 ```
 
-Everything happens in **one screen with tabs**:
+It looks like the terminal panel of VS Code: **a tab per machine on top, the list of that
+machine's terminals on the left, the real terminal on the right**.
 
 ```
- devmesh │ ☰ panel  ● mac:api  ● lap:api          <- tap a tab to switch
- ─────────────────────────────────────────────────
- (the chosen terminal, live)
-
- mac │ api │ 0:PROJECTS:claude*            tablet  <- machine bar: where you are
+ devmesh │ ● laptop  desktop  ○ builder                   + │ 🗑 │ ✕   <- machines (tabs) and buttons
+▎ >_ api              ● │ $ claude
+  >_ web                │   I updated the auth middleware…
+  >_ docs             ● │   Edit src/auth.ts?   (the selected terminal, live)
 ```
 
-- **The first tab is the panel** and it is always there.
-- **Opening a terminal creates its tab**, or jumps to the one already open. Nothing is closed.
-- **If the connection drops, the tab reconnects by itself.** To close it, press `q`.
-- **Leave:** `Ctrl+a d` keeps everything running, and the next `dm` brings you back to the
-  same place.
-- `Ctrl+a p` returns to the panel and `Ctrl+a n` goes to the next tab.
+- **Top bar = machine selector.** The active tab is bright with the machine's color; the others
+  are gray; a machine that is off shows `○`. Tap or click a tab to switch machine.
+- **Left = the machine's terminals**, one row each, with a dot for the agent in it (yellow
+  waiting, blue working, green idle). Tap a row (or `enter`) to show it on the right; arrows or
+  `j`/`k` move; the list refreshes every 3 seconds.
+- **Buttons (top right):** `+` new terminal (type a name), `🗑` delete the terminal on screen
+  (asks first), `✕` leave: everything keeps running and the next `dm` brings you back to the
+  same place. Keys: `Ctrl+a +`, `Ctrl+a x`, `Ctrl+a d`.
+- **Phone:** under 70 columns the list is hidden and the terminal fills the screen; `☰` (or
+  `Ctrl+a s`) swaps to the list and back, and choosing a row returns to the terminal.
+- **If the connection drops, the terminal reconnects by itself.**
+- Needs tmux 3.2 or newer and the `dm-tui` binary. Without them, or with `DM_UI=cards` /
+  `DM_UI=fzf`, `dm` uses the card panel / the fzf panel described below.
 
-### The panel
+### The card panel (`DM_UI=cards`)
 
 The panel is made for touch (a phone or a portrait tablet in Termux) and also works with a
 keyboard and a mouse:
