@@ -11,7 +11,7 @@ dm_feed() {
   local only=${1:-}
   if [[ -n $only ]]; then
     [[ $only =~ ^[a-z][a-z0-9-]{0,15}$ ]] || dm_die "$M_MACHINE_UNAVAILABLE"
-    dm_machines | grep -qx -- "$only" || dm_die "$M_MACHINE_UNAVAILABLE"
+    dm_is_workspace_host "$only" || dm_die "$M_MACHINE_UNAVAILABLE"
   fi
   printf 'V\t%s\t%s\n' "$(dm_version)" "${DM_NAME:-}"
   [[ -n $(dm_machines) ]] || return 0
@@ -70,7 +70,7 @@ dm_feed_new() {
   name=${2:-}
   spec=${3:--}
   [[ $host =~ ^[a-z][a-z0-9-]{0,15}$ ]] || dm_die "$M_MACHINE_UNAVAILABLE"
-  dm_machines | grep -qx -- "$host" || dm_die "$M_MACHINE_UNAVAILABLE"
+  dm_is_workspace_host "$host" || dm_die "$M_MACHINE_UNAVAILABLE"
   [[ -n $name ]] || dm_die "$M_SAY_NAME_TERM"
   [[ $spec == - || ($spec == proj:* && ${spec#proj:} =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,63}$) ]] ||
     dm_die "invalid project"

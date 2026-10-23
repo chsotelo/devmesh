@@ -11,6 +11,9 @@ fi
 set -euo pipefail
 export DM_SELF
 DM_SELF=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")
+# The Go panel runs dm through this bash: on Termux "#!/usr/bin/env bash" only works for
+# programs that go through termux-exec, and Go programs do not.
+export DM_BASH=$BASH
 
 dm_share_dir() {
   local here

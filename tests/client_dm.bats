@@ -302,3 +302,23 @@ setup() {
   [ "$status" -eq 0 ]
   [[ $output == *"Conexión con lap perdida"* ]]
 }
+
+@test "this device is reached locally: dm_run and dm_tty never ssh to themselves" {
+  export DM_SELF="$REPO/client/bin/dm" DM_NAME=tablet
+  run dm_run tablet dm version
+  [ "$status" -eq 0 ]
+  [ -n "$output" ]
+  run dm_tty tablet "dm version"
+  [ "$status" -eq 0 ]
+  ! grep -q "^ssh .*tablet" "$STUB_LOG"
+  [ "$(dm_path tablet)" = tablet ]
+  run dm_local rm -rf /
+  [ "$status" -eq 2 ]
+}
+
+@test "workspace tabs: this device first, then the other machines" {
+  export DM_NAME=lap
+  [ "$(dm_workspace_hosts | tr '\n' ' ')" = "lap pc2 " ]
+  export DM_NAME=tablet
+  [ "$(dm_workspace_hosts | tr '\n' ' ')" = "tablet lap pc2 " ]
+}

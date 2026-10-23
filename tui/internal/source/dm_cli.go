@@ -38,12 +38,14 @@ const (
 	noWindow    = "-"
 	projectSpec = "proj:"
 	envDmSelf   = "DM_SELF"
+	envDmBash   = "DM_BASH"
 	defaultBin  = "dm"
 )
 
 // Dm runs the dm command line.
 type Dm struct {
-	bin string
+	bin  string
+	bash string
 }
 
 // NewDm returns a Source that calls the dm at bin; empty means $DM_SELF, then "dm" in PATH.
@@ -54,7 +56,17 @@ func NewDm(bin string) *Dm {
 	if bin == "" {
 		bin = defaultBin
 	}
-	return &Dm{bin: bin}
+	// dm is a bash script: run it through the bash that started us when known. On Termux
+	// its "#!/usr/bin/env bash" line only works through termux-exec, which Go bypasses.
+	return &Dm{bin: bin, bash: os.Getenv(envDmBash)}
+}
+
+// command is dm with these arguments, through bash when DM_BASH is set.
+func (d *Dm) command(ctx context.Context, args ...string) *exec.Cmd {
+	if d.bash != "" {
+		return exec.CommandContext(ctx, d.bash, append([]string{d.bin}, args...)...)
+	}
+	return exec.CommandContext(ctx, d.bin, args...)
 }
 
 type cappedBuffer struct {
@@ -73,7 +85,7 @@ func (b *cappedBuffer) Write(chunk []byte) (int, error) {
 func (d *Dm) output(ctx context.Context, timeout time.Duration, args ...string) (string, error) {
 	callCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	command := exec.CommandContext(callCtx, d.bin, args...)
+	command := d.command(callCtx, args...)
 	var stdout, stderr cappedBuffer
 	command.Stdout = &stdout
 	command.Stderr = &stderr
@@ -197,7 +209,7 @@ func (d *Dm) OpenCommand(host, session, window string) *exec.Cmd {
 	if checkOpenArguments(host, session, window) != nil {
 		return nil
 	}
-	return exec.Command(d.bin, d.openArguments(host, session, window)...)
+	return d.command(context.Background(), d.openArguments(host, session, window)...)
 }
 
 // CreateCommand is the full screen version of Create.
@@ -205,7 +217,7 @@ func (d *Dm) CreateCommand(host, name, project string) *exec.Cmd {
 	if checkCreateArguments(host, name, project) != nil {
 		return nil
 	}
-	return exec.Command(d.bin, createArguments(host, name, project)...)
+	return d.command(context.Background(), createArguments(host, name, project)...)
 }
 
 // ToolCommand runs one of the Tool* actions through "dm _app run"; nil when the arguments
@@ -215,7 +227,7 @@ func (d *Dm) ToolCommand(tool string, args ...string) *exec.Cmd {
 		return nil
 	}
 	arguments := append([]string{cmdApp, cmdRun, tool}, args...)
-	return exec.Command(d.bin, arguments...)
+	return d.command(context.Background(), arguments...)
 }
 
 func validTool(tool string, args []string) bool {

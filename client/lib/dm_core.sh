@@ -216,6 +216,26 @@ dm_host_field() {
 
 dm_machines() { dm_hosts machine | cut -f1; }
 
+# dm_is_workspace_host NAME — no "| grep -q": under pipefail an early match makes the
+# writer die of SIGPIPE and the whole test fail.
+dm_is_workspace_host() {
+  local hosts
+  hosts=$'\n'$(dm_workspace_hosts)$'\n'
+  [[ -n ${1:-} && $hosts == *$'\n'"$1"$'\n'* ]]
+}
+
+# The tabs of the workspace: this device first (its own terminals, when it has tmux), then
+# every other machine.
+dm_workspace_hosts() {
+  local self=${DM_NAME:-} m
+  if [[ $self =~ ^[a-z][a-z0-9-]{0,15}$ ]] && command -v tmux >/dev/null; then
+    printf '%s\n' "$self"
+  fi
+  for m in $(dm_machines); do
+    [[ $m == "$self" ]] || printf '%s\n' "$m"
+  done
+}
+
 # Terminals live on Linux machines; say so (and how to add one) instead of an empty list.
 dm_require_machines() {
   [[ -n $(dm_machines) ]] && return 0
@@ -225,9 +245,25 @@ dm_require_machines() {
 }
 
 # --- Paths A/B -----------------------------------------------------------------
+# The device dm runs on: its own terminals are reached locally, never through the hub.
+dm_is_self() { [[ -n ${DM_NAME:-} && ${1:-} == "$DM_NAME" ]]; }
+
+# dm_local CMD-WORDS… — run a "dm …" command line on this device (the words were validated
+# by the caller, like the remote side would). Outside the workspace's tmux, so a local
+# attach is not refused as nested.
+dm_local() {
+  [[ ${1:-} == dm ]] || return 2
+  shift
+  env -u TMUX "$BASH" "$DM_SELF" "$@"
+}
+
 # dm_path HOST -> "HOST" (path A, WireGuard) | "HOST-b" (path B, reverse tunnel) | fails.
 dm_path() {
   local host=$1
+  if dm_is_self "$host"; then
+    printf '%s\n' "$host"
+    return 0
+  fi
   if ssh "${DM_SSH_PROBE[@]}" "$host" true 2>/dev/null; then
     printf '%s\n' "$host"
   elif ssh "${DM_SSH_PROBE[@]}" "$host-b" true 2>/dev/null; then
@@ -241,6 +277,10 @@ dm_path() {
 dm_run() {
   local host=$1 alias
   shift
+  if dm_is_self "$host"; then
+    dm_local "$@"
+    return
+  fi
   alias=$(dm_path "$host") || return 255
   # shellcheck disable=SC2029 # arguments are meant to run on the remote side
   ssh "${DM_SSH_PROBE[@]}" "$alias" "$@"
@@ -248,7 +288,12 @@ dm_run() {
 
 # dm_tty HOST REMOTE_CMD — interactive session: mosh on path A when available, else ssh -t.
 dm_tty() {
-  local host=$1 cmd=$2 alias
+  local host=$1 cmd=$2 alias words
+  if dm_is_self "$host"; then
+    read -ra words <<<"$cmd"
+    dm_local "${words[@]}"
+    return
+  fi
   alias=$(dm_path "$host") || dm_die "$host is unreachable (WireGuard and tunnel both down)"
   # mosh needs a direct UDP path: never through the hub (ProxyJump: macOS machines, path B).
   if [[ $alias == "$host" && ${DM_USE_MOSH:-1} == 1 ]] && command -v mosh >/dev/null &&
