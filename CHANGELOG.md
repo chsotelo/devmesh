@@ -7,6 +7,18 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.8] - 2026-10-23
+
+### Fixed
+
+- Accents and symbols showed as "_" in remote terminals (e.g. "_Hola! _En qu_"): over ssh
+  the locale does not arrive and tmux fell back to ASCII. Every attach now forces UTF-8
+  (`tmux -u`).
+- The workspace could stay wider than the screen that opened it (buttons cut on a tablet).
+  It now always takes the size of the screen looking at it.
+- A new remote terminal never got its origin/creation metadata (`set-option` does not take
+  the `=name` form).
+
 ## [0.9.7] - 2026-10-23
 
 ### Fixed

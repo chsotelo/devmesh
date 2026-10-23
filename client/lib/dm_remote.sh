@@ -81,14 +81,17 @@ dm_remote_attach() {
   fi
   if ! tmux has-session -t "=$session" 2>/dev/null; then
     tmux new-session -d -s "$session" -c "$dir"
-    tmux set-option -t "=$session" @origin "$from"
-    tmux set-option -t "=$session" @created "$(date +%s)"
+    # set-option does not take the "=name" exact-match form; the name was validated above.
+    tmux set-option -t "$session" @origin "$from"
+    tmux set-option -t "$session" @created "$(date +%s)"
   fi
   if [[ $win =~ ^[0-9]+$ ]]; then
     tmux select-window -t "=$session:$win" 2>/dev/null || true
   fi
   export DEVMESH_FROM=$from
-  exec tmux attach-session -t "=$session"
+  # -u: UTF-8 always. Over ssh the locale variables do not arrive, and without UTF-8 tmux
+  # draws every accent and symbol as "_".
+  exec tmux -u attach-session -t "=$session"
 }
 
 # _dest SPEC: absolute upload folder ("inbox" or "proj:<name>"), created if needed.

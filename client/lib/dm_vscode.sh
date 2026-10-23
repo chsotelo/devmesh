@@ -292,5 +292,7 @@ dm_vscode_shell() {
     ((n < 100)) || exec "$shell" -l
   done
   tmux set-option -t "$name" @origin vscode \; set-option -t "$name" @created "$(date +%s)"
-  exec tmux attach-session -t "$name"
+  # -u: UTF-8 always. Over ssh the locale variables do not arrive, and without UTF-8 tmux
+  # draws every accent and symbol as "_".
+  exec tmux -u attach-session -t "$name"
 }

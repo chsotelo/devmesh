@@ -76,9 +76,9 @@ setup() {
   mkdir -p "$HOME/PROJECTS/redi"
   run dm_remote_attach redi proj:redi tablet
   grep -q "tmux new-session -d -s redi -c $HOME/PROJECTS/redi" "$STUB_LOG"
-  grep -q 'tmux set-option -t =redi @origin tablet' "$STUB_LOG"
-  grep -q 'tmux set-option -t =redi @created [0-9]' "$STUB_LOG"
-  grep -q 'tmux attach-session -t =redi' "$STUB_LOG"
+  grep -q 'tmux set-option -t redi @origin tablet' "$STUB_LOG"
+  grep -q 'tmux set-option -t redi @created [0-9]' "$STUB_LOG"
+  grep -q 'tmux -u attach-session -t =redi' "$STUB_LOG"
 }
 
 @test "remote attach never escapes the projects dir and reuses existing sessions" {

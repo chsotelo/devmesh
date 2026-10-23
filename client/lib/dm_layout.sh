@@ -372,5 +372,7 @@ dm_ly_start() {
     dm_ly_bind
     dm_ly_tm set-option -t devmesh @dm_layout "$stamp"
   fi
-  exec tmux -L "$DM_WS_SOCKET" attach-session -t =devmesh
+  # -u: UTF-8 always. Over ssh the locale variables do not arrive, and without UTF-8 tmux
+  # draws every accent and symbol as "_".
+  exec tmux -u -L "$DM_WS_SOCKET" attach-session -t =devmesh
 }
