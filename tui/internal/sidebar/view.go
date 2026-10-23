@@ -20,6 +20,7 @@ const (
 	noDot      = " "
 	fixedCols  = 8 // bar, space, icon (2), space, space, dot, space
 	minNameCol = 1
+	cmdGap     = "  "
 )
 
 // View draws the list.
@@ -57,7 +58,8 @@ func (m *Model) rowLines() []string {
 	return lines
 }
 
-// rowLine is: bar, icon, name, agent dot. The cursor row has the subtle background.
+// rowLine is: bar, icon (machine color), name, program (dim), agent dot, like a VS Code
+// terminal list ("api  claude"). The cursor row has the subtle background.
 func (m *Model) rowLine(index int) string {
 	row := m.rows[index]
 	isShown := row.Session == m.shown
@@ -71,17 +73,22 @@ func (m *Model) rowLine(index int) string {
 		nameStyle = theme.Bold()
 		barStyle = theme.Accent()
 	}
-	nameWidth := max(m.width-fixedCols, minNameCol)
-	name := ansi.Truncate(row.Session, nameWidth, ellipsis)
-	pad := strings.Repeat(space, max(nameWidth-lipgloss.Width(name), 0))
+	textWidth := max(m.width-fixedCols, minNameCol)
+	name := ansi.Truncate(row.Session, textWidth, ellipsis)
+	command := ""
+	if room := textWidth - lipgloss.Width(name) - len(cmdGap); row.Command != "" && room >= 3 {
+		command = cmdGap + ansi.Truncate(row.Command, room, ellipsis)
+	}
+	pad := strings.Repeat(space, max(textWidth-lipgloss.Width(name)-lipgloss.Width(command), 0))
 	bar := idleBar
 	if isShown {
 		bar = activeBar
 	}
 	parts := []string{
 		paint(barStyle, background, bar+space),
-		paint(theme.Faint(), background, icon+space),
-		paint(nameStyle, background, name+pad+space),
+		paint(theme.MachineColor(m.color), background, icon+space),
+		paint(nameStyle, background, name),
+		paint(theme.Faint(), background, command+pad+space),
 		paint(dotStyle(row.Agent), background, dotOf(row.Agent)),
 		paint(theme.Faint(), background, space),
 	}
