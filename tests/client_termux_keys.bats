@@ -55,6 +55,10 @@ stub_reload() {
   cmp "$PROPS" "$BATS_TEST_TMPDIR/expected"
   [[ $output == *"already sets extra-keys"* ]]
   [[ $output == *"$LINE"* ]]
+  # Said once: the next "dm update" stays quiet.
+  run termux_extra_keys
+  [[ $output != *"already sets extra-keys"* ]]
+  cmp "$PROPS" "$BATS_TEST_TMPDIR/expected"
 }
 
 @test "extra-keys: second run does not duplicate the row" {

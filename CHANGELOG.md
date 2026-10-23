@@ -7,6 +7,15 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-10-23
+
+### Fixed
+
+- After `dm update`, `dm` re-attached the workspace built by the previous version, whose
+  list was still the old program in memory (on Termux: "fork/exec …"). The workspace is now
+  stamped with the dm version and rebuilt when it changes.
+- The Termux extra-keys notice is shown once, not on every `dm update`.
+
 ## [0.9.5] - 2026-10-23
 
 ### Added
