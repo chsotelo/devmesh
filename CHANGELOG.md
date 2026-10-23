@@ -7,6 +7,17 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-10-23
+
+### Fixed
+
+- `dm` re-attached a workspace left by an older version (tabs per terminal, card panel)
+  instead of opening the VS Code like layout. An old workspace is now replaced; it only
+  holds views, the terminals on the machines are kept.
+- `dm` typed inside a remote terminal opened a panel inside the panel (and so on). It now
+  refuses when another device is looking at that terminal, and in a local tmux (machines
+  start every terminal in tmux) it hands the window over to the panel instead of nesting.
+
 ## [0.9.2] - 2026-10-23
 
 ### Changed
