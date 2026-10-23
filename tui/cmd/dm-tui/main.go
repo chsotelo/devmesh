@@ -34,7 +34,11 @@ func main() {
 		_, _ = os.Stdout.WriteString("dm-tui " + version + "\n")
 		return
 	}
-	if err := runPanel(); err != nil {
+	run := runPanel
+	if len(os.Args) > 1 && os.Args[1] == sidebarCommand {
+		run = func() error { return runSidebar(os.Args[2:]) }
+	}
+	if err := run(); err != nil {
 		_, _ = os.Stderr.WriteString("dm-tui: " + err.Error() + "\n")
 		if errors.Is(err, errNoTerminal) {
 			os.Exit(exitUsage)

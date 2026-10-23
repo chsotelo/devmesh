@@ -3,11 +3,16 @@
 # dm-tui is only a presentation layer: everything remote or sensitive goes through dm.
 # What machines send is untrusted: the panel strips escapes and control characters itself.
 
-# _feed: the mesh as TSV, one record per line, first field is the record type:
+# _feed [HOST]: the mesh (or just one machine) as TSV, one record per line, first field is the record type:
 #   V <version> <device>
 #   M <machine> <OK|EMPTY|OFFLINE> <color> <ip> <lan|-> <mac|-> (the MAC itself is not sent)
 #   T <machine> <session> <window> <window name> <active> <command> <agent> <origin> <created> <activity> <clients>
 dm_feed() {
+  local only=${1:-}
+  if [[ -n $only ]]; then
+    [[ $only =~ ^[a-z][a-z0-9-]{0,15}$ ]] || dm_die "$M_MACHINE_UNAVAILABLE"
+    dm_machines | grep -qx -- "$only" || dm_die "$M_MACHINE_UNAVAILABLE"
+  fi
   printf 'V\t%s\t%s\n' "$(dm_version)" "${DM_NAME:-}"
   [[ -n $(dm_machines) ]] || return 0
   awk -F'\t' -v OFS='\t' '
@@ -23,7 +28,7 @@ dm_feed() {
         for (i = 1; i <= NF; i++) if (i != 2) line = line OFS $i
         print line
       }
-    }' "$DM_CACHE/hosts.tsv" <(dm_collect)
+    }' "$DM_CACHE/hosts.tsv" <(dm_collect "$only")
 }
 
 # _shot HOST SESSION WINDOW: the live screen of a remote terminal (colors kept).

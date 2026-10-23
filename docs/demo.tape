@@ -15,37 +15,39 @@ Enter
 Sleep 4s
 Show
 
-# The panel on a portrait tablet: cards with a live thumbnail of every terminal and the
-# state of the agent in it (waiting for you, working, idle).
+# The layout on a portrait tablet: machines as tabs on top (laptop, desktop, and builder which
+# is off), the terminals of the machine on the left, the live terminal on the right.
 Sleep 3s
-Right
-Sleep 1.5s
-Down
-Sleep 2s
-# Enter opens the full screen detail of the selected terminal.
+# Ctrl+a then an arrow moves to the list; down + enter shows another terminal.
+Ctrl+a
 Left
-Enter
-Sleep 3s
-Escape
 Sleep 1s
-# New terminal: pick the machine, then a project or type a name.
-Type "n"
+Down
+Sleep 1s
+Enter
+Sleep 2.5s
+# + new terminal: type a name, it opens on this machine.
+Ctrl+a
+Type "+"
+Sleep 1.5s
+Type "mobile"
 Sleep 1.5s
 Enter
-Sleep 2s
-Type "mob"
-Sleep 2s
-Escape
-Sleep 1s
-Escape
-Sleep 1s
-# All the shortcuts.
-Type "?"
 Sleep 2.5s
-Escape
-Sleep 1s
+# Another machine: the next tab.
+Ctrl+a
+Type "n"
+Sleep 3s
+Ctrl+a
+Type "n"
+Sleep 2.5s
+Ctrl+a
+Type "n"
+Sleep 2s
+# Leave: everything keeps running.
+Ctrl+a
+Type "d"
+Sleep 1.5s
 Hide
-Type "q"
-Ctrl+C
 Type "tmux -L demo kill-server"
 Enter

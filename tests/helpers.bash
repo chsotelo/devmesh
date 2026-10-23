@@ -99,7 +99,7 @@ setup_client() {
   printf 'pc2\tmachine\t10.73.0.3\t2203\t24\tdev\thome\t-\n' >>"$DM_CACHE/hosts.tsv"
   printf 'tablet\tphone\t10.73.0.4\t-\t-\t-\t-\t-\n' >>"$DM_CACHE/hosts.tsv"
   local l
-  for l in dm_core dm_remote dm_terms dm_files dm_admin dm_repoint dm_trust dm_ui dm_app dm_workspace dm_watch dm_vscode tui_target dm_feed; do
+  for l in dm_core dm_remote dm_terms dm_files dm_admin dm_repoint dm_trust dm_ui dm_app dm_workspace dm_layout dm_watch dm_vscode tui_target dm_feed; do
     # shellcheck source=/dev/null
     source "$REPO/client/lib/$l.sh"
   done

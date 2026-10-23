@@ -1,0 +1,104 @@
+package sidebar
+
+import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/chsotelo/devmesh/tui/internal/feed"
+	"github.com/chsotelo/devmesh/tui/internal/i18n"
+	"github.com/chsotelo/devmesh/tui/internal/theme"
+)
+
+const (
+	icon       = ">_"
+	activeBar  = "▎"
+	idleBar    = " "
+	ellipsis   = "…"
+	space      = " "
+	noDot      = " "
+	fixedCols  = 8 // bar, space, icon (2), space, space, dot, space
+	minNameCol = 1
+)
+
+// View draws the list.
+func (m *Model) View() string {
+	if m.width <= 0 {
+		return ""
+	}
+	var lines []string
+	switch {
+	case !m.loaded:
+		lines = append(lines, m.message(i18n.KeyLoading))
+	case !m.online:
+		lines = append(lines, m.message(i18n.KeyOffline))
+	case len(m.rows) == 0:
+		lines = append(lines, m.message(i18n.KeyNoTerminals))
+	default:
+		lines = m.rowLines()
+	}
+	if m.err != "" {
+		lines = append(lines, theme.Error().Render(ansi.Truncate(space+m.err, m.width, ellipsis)))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (m *Model) message(key string) string {
+	return theme.Faint().Render(ansi.Truncate(space+m.cat.Text(key), m.width, ellipsis))
+}
+
+func (m *Model) rowLines() []string {
+	end := min(m.top+m.listHeight(), len(m.rows))
+	lines := make([]string, 0, end-m.top)
+	for i := m.top; i < end; i++ {
+		lines = append(lines, m.rowLine(i))
+	}
+	return lines
+}
+
+// rowLine is: bar, icon, name, agent dot. The cursor row has the subtle background.
+func (m *Model) rowLine(index int) string {
+	row := m.rows[index]
+	isShown := row.Session == m.shown
+	background := lipgloss.NewStyle()
+	if index == m.cursor {
+		background = background.Background(lipgloss.Color(theme.ColorSelection))
+	}
+	nameStyle := theme.Dim()
+	barStyle := theme.Faint()
+	if isShown {
+		nameStyle = theme.Bold()
+		barStyle = theme.Accent()
+	}
+	nameWidth := max(m.width-fixedCols, minNameCol)
+	name := ansi.Truncate(row.Session, nameWidth, ellipsis)
+	pad := strings.Repeat(space, max(nameWidth-lipgloss.Width(name), 0))
+	bar := idleBar
+	if isShown {
+		bar = activeBar
+	}
+	parts := []string{
+		paint(barStyle, background, bar+space),
+		paint(theme.Faint(), background, icon+space),
+		paint(nameStyle, background, name+pad+space),
+		paint(dotStyle(row.Agent), background, dotOf(row.Agent)),
+		paint(theme.Faint(), background, space),
+	}
+	return strings.Join(parts, "")
+}
+
+func paint(style, background lipgloss.Style, text string) string {
+	return style.Inherit(background).Render(text)
+}
+
+func dotOf(state feed.AgentState) string {
+	if state == feed.AgentNone {
+		return noDot
+	}
+	return theme.Dot
+}
+
+func dotStyle(state feed.AgentState) lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(theme.StateColor(state))
+}

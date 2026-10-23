@@ -17,6 +17,7 @@ func stubDm(t *testing.T) (bin, argLog string) {
 	script := `#!/bin/sh
 printf '%s\n' "$@" > "$STUB_LOG"
 case "$1" in
+  _ws) case "$2" in shown) printf 'api\n' ;; esac ;;
   _feed) printf 'V\t0.9.0\ttablet\nM\tlap\tOK\t33\t10.0.0.2\t-\tmac\nT\tlap\tapi\t1\tn\t1\tclaude\twaiting\ttablet\t1\t2\t-\n' ;;
   _shot) printf '\n\033[31mred\033[0m line\nsecond\n\n\n' ;;
   _proj) printf 'api\nmy app\nx);rm -rf /\n$(id)\ndocs\n' ;;
@@ -194,5 +195,56 @@ func TestNewDmFallsBackToTheEnvironmentThenToPath(t *testing.T) {
 	t.Setenv(envDmSelf, "")
 	if got := NewDm("").bin; got != "dm" {
 		t.Fatalf("bin = %q", got)
+	}
+}
+
+func TestWorkspaceCommandsPassValidatedPlainArguments(t *testing.T) {
+	bin, argLog := stubDm(t)
+	dm := NewDm(bin)
+
+	if err := dm.Show(context.Background(), PaneTarget{Host: "lap", Session: "api", Window: "2", Focus: true}); err != nil {
+		t.Fatalf("Show: %v", err)
+	}
+	if args := strings.Join(recordedArguments(t, argLog), " "); args != "_ws show lap api 2 focus" {
+		t.Fatalf("args = %q", args)
+	}
+	if err := dm.Hold(context.Background(), "lap", HoldOffline); err != nil {
+		t.Fatalf("Hold: %v", err)
+	}
+	if args := strings.Join(recordedArguments(t, argLog), " "); args != "_ws hold lap offline" {
+		t.Fatalf("args = %q", args)
+	}
+	session, err := dm.Shown(context.Background(), "lap")
+	if err != nil || session != "api" {
+		t.Fatalf("Shown = %q, %v", session, err)
+	}
+	snap, err := dm.FeedHost(context.Background(), "lap")
+	if err != nil || len(snap.Machines) != 1 {
+		t.Fatalf("FeedHost = %+v, %v", snap, err)
+	}
+	if args := strings.Join(recordedArguments(t, argLog), " "); args != "_feed lap" {
+		t.Fatalf("args = %q", args)
+	}
+}
+
+func TestWorkspaceCommandsRefuseHostileArgumentsBeforeRunning(t *testing.T) {
+	bin, _ := stubDm(t)
+	dm := NewDm(bin)
+	ctx := context.Background()
+
+	if err := dm.Show(ctx, PaneTarget{Host: "lap", Session: "a;b", Window: "1"}); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("Show session: %v", err)
+	}
+	if err := dm.Show(ctx, PaneTarget{Host: "L A", Session: "api"}); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("Show host: %v", err)
+	}
+	if err := dm.Hold(ctx, "lap", "x; id"); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("Hold kind: %v", err)
+	}
+	if _, err := dm.Shown(ctx, "$(id)"); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("Shown host: %v", err)
+	}
+	if _, err := dm.FeedHost(ctx, "a b"); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("FeedHost host: %v", err)
 	}
 }

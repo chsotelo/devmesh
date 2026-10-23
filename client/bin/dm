@@ -30,7 +30,7 @@ dm_share_dir() {
   fi
 }
 
-for _lib in dm_core dm_remote dm_terms dm_files dm_admin dm_repoint dm_trust dm_ui dm_app dm_workspace dm_watch dm_vscode tui_target dm_feed; do
+for _lib in dm_core dm_remote dm_terms dm_files dm_admin dm_repoint dm_trust dm_ui dm_app dm_workspace dm_layout dm_watch dm_vscode tui_target dm_feed; do
   # shellcheck source=/dev/null
   source "$(dm_share_dir)/lib/$_lib.sh"
 done
@@ -44,6 +44,7 @@ dm_dispatch() {
     panel) dm_app_main ;;
     _app) dm_app_dispatch "$@" ;;
     _tab) dm_ws_tab "$@" ;;
+    _ws) dm_ly_dispatch "$@" ;;
     list) dm_terms ;;
     new) dm_ui_new "$@" ;;
     go | m) dm_go "$@" ;;
@@ -69,7 +70,7 @@ dm_dispatch() {
     help | -h | --help) dm_help ;;
     # Machine-side helpers, called over SSH by other devices.
     _preview) dm_ui_preview "$@" ;;
-    _feed) dm_feed ;;
+    _feed) dm_feed "$@" ;;
     _shot) dm_feed_shot "$@" ;;
     _proj) dm_feed_projects "$@" ;;
     _i18n) dm_feed_i18n ;;
