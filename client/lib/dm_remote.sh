@@ -22,7 +22,8 @@ dm_tmux_tsv() { awk -v sep="$DM_TMUX_SEP" '{gsub(/\|~\|/, "\t"); print}'; }
 # "session<TAB>origin" for every attached client.
 dm_session_clients() {
   local pid session
-  tmux list-clients -F "#{client_pid}${DM_TMUX_SEP}#{session_name}" 2>/dev/null | dm_tmux_tsv |
+  # No tmux server yet (a phone, a fresh machine) is "no clients", not an error.
+  { tmux list-clients -F "#{client_pid}${DM_TMUX_SEP}#{session_name}" 2>/dev/null || true; } | dm_tmux_tsv |
     while IFS=$'\t' read -r pid session; do
       printf '%s\t%s\n' "$session" "$(dm_client_origin "$pid")"
     done
@@ -35,7 +36,8 @@ dm_remote_who() {
   clients=$(dm_session_clients)
   fmt="#{session_name}${t}#{window_index}${t}#{window_name}${t}#{window_active}${t}#{pane_current_command}"
   fmt+="${t}#{@agent}${t}#{@origin}${t}#{@created}${t}#{window_activity}"
-  tmux list-windows -a -F "$fmt" 2>/dev/null | dm_tmux_tsv |
+  # No tmux server yet is "no terminals" (EMPTY), not an unreachable machine.
+  { tmux list-windows -a -F "$fmt" 2>/dev/null || true; } | dm_tmux_tsv |
     DM_CLIENTS=$clients awk -F'\t' -v OFS='\t' '
       BEGIN {
         n = split(ENVIRON["DM_CLIENTS"], rows, "\n")
