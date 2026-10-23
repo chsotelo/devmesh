@@ -57,7 +57,7 @@ dm_app_header() {
   d=$(dm_c "$DM_C_DIM")
   t=$(dm_c "$DM_C_TEXT")
   r=$(dm_r)
-  (($(dm_app_depth) > 1)) && left="$t‹ $M_WORD_BACK$r"
+  (($(dm_app_depth) > 1)) && left="${t}‹ $M_WORD_BACK$r"
   if dm_narrow; then
     right="${d}[$M_WORD_NEW] [$M_WORD_SEND] [$M_WORD_WEB] [↻]$r"
   else
