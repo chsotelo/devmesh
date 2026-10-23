@@ -107,7 +107,7 @@ dm_update() (
     # The installer runs as root: it must not read scripts from a directory the user can change.
     local rt
     rt=$(sudo mktemp -d)
-    cat "$tmp/dist.tgz" | sudo tee "$rt/dist.tgz" >/dev/null
+    sudo install -m 0644 "$tmp/dist.tgz" "$rt/dist.tgz"
     if [[ -n ${DM_DIST_SHA:-} && $(sudo sha256sum "$rt/dist.tgz" | cut -d' ' -f1) != "$DM_DIST_SHA" ]]; then
       sudo rm -rf "$rt"
       dm_die "the bundle changed after verification; nothing installed"

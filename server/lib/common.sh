@@ -206,6 +206,7 @@ valid_ipv6() {
 }
 # IP mode: HUB_HOST (or the argument) is an IPv4/IPv6 literal instead of a domain.
 valid_ip() { valid_ipv4_strict "$1" || valid_ipv6 "$1"; }
+# shellcheck disable=SC2120 # the argument is optional: callers test HUB_HOST by default
 hub_ip_mode() { valid_ip "${1:-$HUB_HOST}"; }
 # Host as it appears in a URL: IPv6 literals need brackets.
 url_host() { if [[ $1 == *:* ]]; then printf '[%s]\n' "$1"; else printf '%s\n' "$1"; fi; }

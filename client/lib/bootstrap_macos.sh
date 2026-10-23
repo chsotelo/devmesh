@@ -21,11 +21,12 @@ macos_brew_bin() {
   fi
 }
 
-# fzf (pickers), tmux (shared terminals), wireguard-tools (local key generation only).
+# fzf (pickers), tmux (shared terminals), wireguard-tools (local key generation only),
+# coreutils (timeout, used by the hub watcher).
 macos_deps() {
   command -v brew >/dev/null || bs_die "Homebrew is required (https://brew.sh)"
   local missing=() tool
-  for tool in fzf:fzf tmux:tmux wg:wireguard-tools; do
+  for tool in fzf:fzf tmux:tmux wg:wireguard-tools timeout:coreutils; do
     command -v "${tool%%:*}" >/dev/null || missing+=("${tool#*:}")
   done
   if ((${#missing[@]})); then

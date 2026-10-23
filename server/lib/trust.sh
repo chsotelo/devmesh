@@ -107,7 +107,10 @@ rev_hash() {
 }
 
 # The current epoch line as devices parse it (delivered to a joining device, like the approvers).
-epoch_line() { [[ -r $DEVMESH_EPOCH ]] && awk -F'\t' 'NF == 4 {print "epoch " $1 " " $2 " " $3 " " $4; exit}' "$DEVMESH_EPOCH" || true; }
+epoch_line() {
+  [[ -r $DEVMESH_EPOCH ]] || return 0
+  awk -F'\t' 'NF == 4 {print "epoch " $1 " " $2 " " $3 " " $4; exit}' "$DEVMESH_EPOCH"
+}
 
 epoch_serial() { [[ -r $DEVMESH_EPOCH ]] && awk -F'\t' 'NF == 4 {print $1; exit}' "$DEVMESH_EPOCH" || printf '0\n'; }
 
