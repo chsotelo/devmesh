@@ -65,6 +65,8 @@ const (
 	KeyWordFilter      = "M_TUI_WORD_FILTER"
 	KeyWaitingCount    = "M_TUI_WAITING"
 	KeyNoTerminals     = "M_TUI_NO_TERMINALS"
+	KeyBtnNew          = "M_LY_BTN_NEW"
+	KeyBtnDelete       = "M_LY_BTN_DELETE"
 	KeyNoTerminalsHint = "M_TUI_NO_TERMINALS_HINT"
 	KeyOfflineHint     = "M_TUI_OFFLINE_HINT"
 	KeyCreateNamed     = "M_TUI_CREATE_NAMED"

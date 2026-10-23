@@ -174,6 +174,34 @@ setup() {
   [ "$status" -ne 0 ]
 }
 
+@test "wide screens resize the list only when it lost its width (each resize redraws)" {
+  STUB_WIDTH=$DM_LY_SIDE_COLS
+  dm_ly_zoomed() { return 1; }
+  tmux() {
+    printf 'tmux %s\n' "$*" >>"$STUB_LOG"
+    case $* in *'#{pane_width}'*) echo "$STUB_WIDTH" ;; esac
+    return 0
+  }
+  dm_ly_apply_wide @1 %2 %1
+  ! grep -q 'resize-pane' "$STUB_LOG"
+  STUB_WIDTH=40
+  dm_ly_apply_wide @1 %2 %1
+  grep -q "^tmux resize-pane -t %1 -x $DM_LY_SIDE_COLS\$" "$STUB_LOG"
+}
+
+@test "act: the list buttons run on the window of their machine, other words are refused" {
+  dm_ly_win_of_host() { [ "$1" = lap ] && echo @4; }
+  dm_ly_click() { echo "click $1 $2"; }
+  run dm_ly_act add lap
+  [ "$output" = "click add @4" ]
+  run dm_ly_act delete lap
+  [ "$output" = "click delete @4" ]
+  run dm_ly_act exit lap
+  [ "$status" -ne 0 ]
+  run dm_ly_act add other
+  [ "$status" -ne 0 ]
+}
+
 @test "the pane command shows a message after a detach and runs the demo screen with DM_DEMO=1" {
   dm_ws_tab() { echo "tab $*"; }
   dm_ly_idle() { :; }
@@ -203,7 +231,8 @@ setup() {
   run "$real" -S "$sock" source-file "$REPO/client/tmux/layout.conf"
   "$real" -S "$sock" kill-server
   [ -z "$output" ]
-  for range in menu add delete exit; do grep -q "range=user|$range" "$REPO/client/tmux/layout.conf"; done
+  for range in menu exit; do grep -q "range=user|$range" "$REPO/client/tmux/layout.conf"; done
+  ! grep -q "range=user|add" "$REPO/client/tmux/layout.conf"
 }
 
 @test "dm inside the workspace itself opens nothing" {

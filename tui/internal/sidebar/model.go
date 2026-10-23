@@ -29,6 +29,7 @@ type Source interface {
 	Shown(ctx context.Context, host string) (string, error)
 	Show(ctx context.Context, target source.PaneTarget) error
 	Hold(ctx context.Context, host, kind string) error
+	Act(ctx context.Context, host, action string) error
 }
 
 // Options are what the sidebar needs from the outside.
@@ -124,6 +125,15 @@ func (m *Model) holdCmd(kind string) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), actionBudget)
 		defer cancel()
 		return doneMsg{err: src.Hold(ctx, host, kind)}
+	}
+}
+
+func (m *Model) actCmd(action string) tea.Cmd {
+	host, src := m.host, m.src
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), actionBudget)
+		defer cancel()
+		return doneMsg{err: src.Act(ctx, host, action)}
 	}
 }
 
