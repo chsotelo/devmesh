@@ -46,7 +46,11 @@ termux_extra_keys() {
   local props="$HOME/.termux/termux.properties"
   local row="extra-keys = [['ESC','/','-','|','HOME','UP','END','PGUP'],['TAB','CTRL','ALT','LEFT','DOWN','RIGHT','PGDN','ENTER']]"
   if [[ -f $props ]] && grep -Eq '^[[:space:]]*extra-keys[[:space:]]*=' "$props"; then
-    bs_log "$props already sets extra-keys; to add devmesh's row, replace that line with: $row"
+    # Said once, not on every "dm update".
+    if [[ ! -e $HOME/.termux/.devmesh-extra-keys-noted ]]; then
+      bs_log "$props already sets extra-keys; to add devmesh's row, replace that line with: $row"
+      : >"$HOME/.termux/.devmesh-extra-keys-noted"
+    fi
     return 0
   fi
   install -d "$HOME/.termux"

@@ -251,9 +251,9 @@ setup() {
   }
   run dm_ly_start
   grep -q "kill-server" "$STUB_LOG"
-  grep -q "set-option -t devmesh @dm_layout 1" "$STUB_LOG"
+  grep -q "set-option -t devmesh @dm_layout layout-$(dm_version)" "$STUB_LOG"
   : >"$STUB_LOG"
   rm -f "$BATS_TEST_TMPDIR/killed"
-  STUB_LAYOUT=1 run dm_ly_start
+  STUB_LAYOUT="layout-$(dm_version)" run dm_ly_start
   ! grep -q "kill-server" "$STUB_LOG"
 }

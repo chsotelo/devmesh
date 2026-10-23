@@ -353,10 +353,12 @@ dm_ly_build_window() {
 dm_ly_start() {
   local bin m first=1
   bin=$(dm_tui_bin) || return 1
-  # A workspace left by an older dm (tabs per terminal, card panel) is not this layout:
-  # drop it. It only holds views; the terminals live on the machines and are kept.
+  # A workspace built by another dm version (older layout, card panel, or processes still
+  # running old code) is rebuilt. It only holds views; the terminals live on the machines.
+  local stamp
+  stamp="layout-$(dm_version)"
   if dm_ly_tm has-session -t =devmesh 2>/dev/null &&
-    [[ $(dm_ly_tm show-options -qv -t devmesh @dm_layout 2>/dev/null) != 1 ]]; then
+    [[ $(dm_ly_tm show-options -qv -t devmesh @dm_layout 2>/dev/null) != "$stamp" ]]; then
     dm_ly_tm kill-server 2>/dev/null || true
   fi
   if ! dm_ly_tm has-session -t =devmesh 2>/dev/null; then
@@ -368,7 +370,7 @@ dm_ly_start() {
     ((first)) && return 1
     dm_ly_tm source-file "$(dm_share_dir)/tmux/layout.conf"
     dm_ly_bind
-    dm_ly_tm set-option -t devmesh @dm_layout 1
+    dm_ly_tm set-option -t devmesh @dm_layout "$stamp"
   fi
   exec tmux -L "$DM_WS_SOCKET" attach-session -t =devmesh
 }
