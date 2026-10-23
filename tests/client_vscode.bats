@@ -146,7 +146,7 @@ write_settings() { printf '%s' "$1" >"$SETTINGS"; }
   run dm_vscode_shell
   [ "$status" -eq 0 ]
   grep -qF "tmux new-session -d -s my-app -c $dir" "$STUB_LOG"
-  grep -qF "tmux attach-session -t my-app" "$STUB_LOG"
+  grep -qF "tmux -u attach-session -t my-app" "$STUB_LOG"
   grep -qF 'set-option -t my-app @origin vscode' "$STUB_LOG"
 }
 
@@ -159,8 +159,8 @@ write_settings() { printf '%s' "$1" >"$SETTINGS"; }
   run dm_vscode_shell
   [ "$status" -eq 0 ]
   grep -qF "tmux new-session -d -s shop-2 -c $dir" "$STUB_LOG"
-  grep -qF "tmux attach-session -t shop-2" "$STUB_LOG"
-  run grep -qx "tmux attach-session -t shop" "$STUB_LOG"
+  grep -qF "tmux -u attach-session -t shop-2" "$STUB_LOG"
+  run grep -qx "tmux -u attach-session -t shop" "$STUB_LOG"
   [ "$status" -ne 0 ]
   export STUB_TMUX_HAS="shop shop-2"
   run dm_vscode_shell

@@ -72,7 +72,7 @@ setup() {
   grep -q '^tm set-option -p -t %2 @dm_role side$' "$STUB_LOG"
   grep -q "^tm source-file $DM_SHARE/tmux/layout.conf$" "$STUB_LOG"
   grep -q 'MouseDown1Status' "$STUB_LOG"
-  grep -q '^exec tmux -L devmesh attach-session -t =devmesh$' "$STUB_LOG"
+  grep -q '^exec tmux -u -L devmesh attach-session -t =devmesh$' "$STUB_LOG"
 }
 
 @test "start: an existing workspace is just re-attached" {
@@ -81,7 +81,7 @@ setup() {
   exec() { printf 'exec %s\n' "$*" >>"$STUB_LOG"; }
   dm_ly_start
   ! grep -q 'new-session\|new-window' "$STUB_LOG"
-  grep -q '^exec tmux -L devmesh attach-session' "$STUB_LOG"
+  grep -q '^exec tmux -u -L devmesh attach-session' "$STUB_LOG"
 }
 
 @test "show: respawns the right pane of the machine with a quoted, validated command" {

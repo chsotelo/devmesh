@@ -59,7 +59,7 @@ dm_ws_start() {
   fi
   local share
   share=$(dm_share_dir)
-  exec tmux -L "$DM_WS_SOCKET" -f "$share/tmux/workspace.conf" new-session -A -s "devmesh" -n panel \
+  exec tmux -u -L "$DM_WS_SOCKET" -f "$share/tmux/workspace.conf" new-session -A -s "devmesh" -n panel \
     "'$BASH' '$DM_SELF' panel"
 }
 
