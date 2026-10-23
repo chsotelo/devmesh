@@ -31,7 +31,7 @@ dm_trust_my_pub() {
 dm_trust_is_approver() {
   local pub
   pub=$(dm_trust_my_pub) || return 1
-  [[ -s $(dm_allowed_signers) ]] && awk '{print $3 " " $4}' "$(dm_allowed_signers)" | grep -qxF -- "$pub"
+  [[ -s $(dm_allowed_signers) ]] && awk '{print $3 " " $4}' "$(dm_allowed_signers)" | grep -xF -- "$pub" >/dev/null
 }
 
 # Hub text is untrusted: keep printable ASCII only before showing it.
@@ -396,7 +396,7 @@ dm_trust_revoke() {
   key=$(awk -v n="$name" '$1 == n {print $3 " " $4; exit}' "$allowed")
   [[ -n $key ]] || key=$(awk -F'\t' -v n="$name" '$1 == n {k = $2} END {print k}' "$log" 2>/dev/null)
   if [[ -z $key && -z $hubkey ]]; then
-    if ssh -o ConnectTimeout=6 hub-admin pending 2>/dev/null | cut -f1 | grep -qx "$name"; then
+    if ssh -o ConnectTimeout=6 hub-admin pending 2>/dev/null | cut -f1 | grep -x "$name" >/dev/null; then
       dm_info "$name was never approved: no revocation needed"
       return 0
     fi

@@ -25,7 +25,7 @@ dm_ly_ready() {
   [[ ${DM_UI:-layout} == layout ]] || return 1
   dm_ly_tmux_ok || return 1
   dm_tui_bin >/dev/null || return 1
-  [[ -n $(dm_machines) ]]
+  [[ -n $(dm_workspace_hosts) ]]
 }
 
 dm_ly_need_tmux() { [[ -n ${TMUX:-} ]] || dm_die "this runs inside the devmesh workspace"; }
@@ -311,6 +311,11 @@ dm_ly_tm() { tmux -L "$DM_WS_SOCKET" "$@"; }
 
 dm_ly_bind() {
   local base="'$BASH' '$DM_SELF' _ws"
+  # Button labels in the user's language (the status bar reads them as options).
+  dm_ly_tm set-option -g @dm_b_new "$M_LY_BTN_NEW"
+  dm_ly_tm set-option -g @dm_b_delete "$M_LY_BTN_DELETE"
+  dm_ly_tm set-option -g @dm_b_exit "$M_LY_BTN_EXIT"
+  dm_ly_tm set-option -g @dm_b_list "$M_LY_BTN_LIST"
   dm_ly_tm bind-key -n MouseDown1Status if-shell -F '#{==:#{mouse_status_range},window}' \
     'select-window -t=' "run-shell \"$base click '#{mouse_status_range}' '#{window_id}'\""
   dm_ly_tm bind-key + run-shell "$base click add '#{window_id}'"
@@ -335,6 +340,7 @@ dm_ly_build_window() {
   color=$(dm_host_field "$m" color)
   [[ $color =~ ^[0-9]+$ ]] && dm_ly_tm set-option -w -t "$wid" @dm_color "$color"
   dm_ly_tm set-option -w -t "$wid" @dm_host "$m"
+  dm_is_self "$m" && dm_ly_tm set-option -w -t "$wid" @dm_self 1
   dm_ly_tm set-option -w -t "$wid" automatic-rename off
   main=$(dm_ly_tm display-message -p -t "$wid" '#{pane_id}')
   dm_ly_tm set-option -p -t "$main" @dm_role main
@@ -354,7 +360,7 @@ dm_ly_start() {
     dm_ly_tm kill-server 2>/dev/null || true
   fi
   if ! dm_ly_tm has-session -t =devmesh 2>/dev/null; then
-    for m in $(dm_machines); do
+    for m in $(dm_workspace_hosts); do
       [[ $m =~ $DM_LY_HOST_RE ]] || continue
       dm_ly_build_window "$m" "$first" "$bin" || return 1
       first=0

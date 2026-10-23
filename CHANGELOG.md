@@ -7,6 +7,26 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-10-23
+
+### Added
+
+- A tab for this device (⌂), first: its own terminals, reached locally (no ssh, no hub).
+  On a phone it lists the local tmux sessions; on a machine it replaces the trip through
+  the hub to itself.
+
+### Fixed
+
+- Termux: the panel's list stayed on "loading…" with "fork/exec …": Go programs bypass
+  termux-exec, so dm's "#!/usr/bin/env bash" could not run. dm now passes its bash
+  (`DM_BASH`) and the panel runs dm through it.
+- A machine check could fail under pipefail (`| grep -q` and SIGPIPE).
+
+### Changed
+
+- Buttons with words in the user's language (New / Delete / Exit, Nueva / Borrar / Salir);
+  phones get symbols (☰ + − ✕) since Termux has no emoji font.
+
 ## [0.9.4] - 2026-10-23
 
 ### Changed

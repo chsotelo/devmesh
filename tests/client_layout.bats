@@ -58,9 +58,14 @@ setup() {
   dm_ly_tm() { printf 'tm %s\n' "$*" >>"$STUB_LOG"; case $1 in has-session) return 1 ;; new-session | new-window) echo @1 ;; display-message) echo %1 ;; split-window) echo %2 ;; esac; }
   exec() { printf 'exec %s\n' "$*" >>"$STUB_LOG"; }
   dm_ly_start
-  [ "$(grep -c '^tm new-window ' "$STUB_LOG")" = 1 ]
+  # This device (tablet, with tmux) comes first, then every machine: 1 session + 2 windows.
+  grep -q '^tmux .*new-session .* -n tablet ' "$STUB_LOG"
+  grep -q '^tm set-option -w -t @1 @dm_self 1$' "$STUB_LOG"
+  [ "$(grep -c '^tm new-window ' "$STUB_LOG")" = 2 ]
+  grep -q '^tm new-window -d -P -F #{window_id} -t =devmesh: -n lap ' "$STUB_LOG"
   grep -q '^tm new-window -d -P -F #{window_id} -t =devmesh: -n pc2 ' "$STUB_LOG"
-  grep -q "^tm split-window -d -h -b -l 24 -t %1 -P -F #{pane_id} '/opt/share/bin/dm-tui-x' sidebar --host 'lap'\$" "$STUB_LOG"
+  grep -q "^tm split-window -d -h -b -l 24 -t %1 -P -F #{pane_id} '/opt/share/bin/dm-tui-x' sidebar --host 'tablet'\$" "$STUB_LOG"
+  grep -q "sidebar --host 'lap'" "$STUB_LOG"
   grep -q "sidebar --host 'pc2'" "$STUB_LOG"
   grep -q '^tm set-option -w -t @1 @dm_color 22$' "$STUB_LOG"
   grep -q '^tm set-option -w -t @1 @dm_host lap$' "$STUB_LOG"
