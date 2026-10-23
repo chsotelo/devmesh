@@ -220,7 +220,10 @@ owner_sign() { sign "$HOME/.ssh/id_devmesh" "$@"; }
   [ "$output" = SIG ]
   rm -rf "$DEVMESH_SHARE/dist"
   run bash -c "bash '$REPO/server/sbin/devmesh' dist | tar -tzf - | grep -cx VERSION"
-  [ "$output" = 1 ]
+  [ "$output" = 1 ] || {
+    printf 'entries: %s\n' "$(bash "$REPO/server/sbin/devmesh" dist 2>&1 | tar -tzf - 2>&1 | head -5)"
+    false
+  }
 }
 
 # --- crypto: tr_verify / tr_process_bundle ---------------------------------------------------

@@ -64,7 +64,7 @@ dm_app_header() {
     right="${d}[$M_WORD_NEW] [$M_WORD_SEND] [$M_WORD_FETCH] [$M_WORD_WEB] [↻]$r"
   fi
   w=$(($(dm_ui_listw) - 3))
-  plain=$(printf '%s%s' "$left" "$right" | sed $'s/\033\\[[0-9;]*m//g')
+  plain=$(printf '%s%s' "$left" "$right" | LC_ALL=C sed $'s/\033\\[[0-9;]*m//g')
   pad=$((w - ${#plain}))
   ((pad < 1)) && pad=1
   printf ' %s%*s%s\n' "$left" "$pad" "" "$right"

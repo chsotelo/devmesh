@@ -70,6 +70,9 @@ mkdir -p "$2/client/bin"
 printf 'fake' >"$2/client/bin/dm-tui-linux-amd64"
 STUB
   chmod +x "$BATS_TEST_TMPDIR/bin/make"
+  # release.sh checks that Go exists before it calls make; the runner may have none.
+  printf '#!/bin/sh\nexit 0\n' >"$BATS_TEST_TMPDIR/bin/go"
+  chmod +x "$BATS_TEST_TMPDIR/bin/go"
   export STUB_MAKE_LOG="$BATS_TEST_TMPDIR/make.log"
   DM_RELEASE_TUI=1 PATH="$BATS_TEST_TMPDIR/bin:$PATH" run bash "$REPO/scripts/release.sh" "$VER" "$OUT"
   rm -f "$REPO/client/bin/dm-tui-linux-amd64"
