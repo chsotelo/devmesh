@@ -48,7 +48,9 @@ dm_watch_notify() {
 # _notify-act MACHINE PANE SINCE KEY: a notification button; reports the outcome as a toast.
 dm_watch_act() {
   local machine=${1:-} pane=${2:-} since=${3:-} key=${4:-} out msg
-  dm_valid_machine "$machine" && [[ $pane =~ ^%[0-9]+$ && $since =~ ^[0-9]+$ ]] || dm_die "invalid arguments"
+  if ! dm_valid_machine "$machine" || ! [[ $pane =~ ^%[0-9]+$ && $since =~ ^[0-9]+$ ]]; then
+    dm_die "invalid arguments"
+  fi
   case $key in 1 | 2 | 3 | Escape | Enter) ;; *) dm_die "key not allowed" ;; esac
   out=$(dm_run "$machine" dm _key "$pane" "$since" "$key" 2>/dev/null) || true
   case $out in

@@ -98,7 +98,10 @@ setup() {
   [[ $output != *volver* && $output == *"[nueva]"* ]]
   dm_app_push machine lap
   run dm_app_header
-  [[ $output == *"‹ volver"* ]]
+  [[ $output == *"‹ volver"* ]] || {
+    printf 'header was: %q (depth %s)\n' "$output" "$(dm_app_depth)"
+    false
+  }
   COLUMNS=46 run dm_app_header
   [[ $output != *"[traer]"* ]]
 }

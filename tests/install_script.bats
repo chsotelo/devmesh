@@ -7,7 +7,7 @@ setup() {
   VER=$(tr -d '[:space:]' <"$REPO/VERSION")
   T=$(cd "$BATS_TEST_TMPDIR" && pwd -P)
   OUT="$T/dist"
-  bash "$REPO/scripts/release.sh" "$VER" "$OUT" >/dev/null
+  DM_RELEASE_TUI=0 bash "$REPO/scripts/release.sh" "$VER" "$OUT" >/dev/null
   export DEVMESH_VERSION="$VER"
   export DEVMESH_TARBALL_URL="file://$OUT/devmesh-$VER.tar.gz"
   export DEVMESH_SUMS_URL="file://$OUT/SHA256SUMS"

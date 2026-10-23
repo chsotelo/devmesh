@@ -164,8 +164,10 @@ node_hubwatch() {
   mkdir -p "$NODE_STATE"
   read -r _ fails alerted 2>/dev/null <"$file" || true
   if node_hub_ok; then
-    ((alerted)) && curl -fsS -m 10 -H "Title: devmesh hub is back" -d "hub reachable again (seen by $DM_NAME)" \
-      "https://ntfy.sh/$DM_WATCH_TOPIC" >/dev/null || true
+    if ((alerted)); then
+      curl -fsS -m 10 -H "Title: devmesh hub is back" -d "hub reachable again (seen by $DM_NAME)" \
+        "https://ntfy.sh/$DM_WATCH_TOPIC" >/dev/null || true
+    fi
     printf 'fails 0 0\n' >"$file"
     return 0
   fi

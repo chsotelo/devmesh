@@ -46,7 +46,7 @@ dm_ui_listw() {
 dm_ui_line() {
   local left=$1 right=$2 w plain pad
   w=$(dm_ui_listw)
-  plain=$(printf '%b' "$left" | sed $'s/\033\\[[0-9;]*m//g')
+  plain=$(printf '%b' "$left" | LC_ALL=C sed $'s/\033\\[[0-9;]*m//g')
   pad=$((w - ${#plain} - ${#right}))
   if ((pad < 2)); then
     printf '%b' "$left"

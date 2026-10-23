@@ -59,3 +59,10 @@ FORBIDDEN=(
     [[ $target != /* ]] || { printf 'absolute symlink: %s -> %s\n' "$f" "$target"; false; }
   done < <(git -C "$REPO" ls-files -s | awk '$1 == "120000" {print $4}')
 }
+
+@test "no \$var directly followed by a non-ASCII character (bash may read the byte as part of the name)" {
+  local pat
+  pat=$(printf '\\$[A-Za-z_][A-Za-z0-9_]*[\x80-\xff]')
+  LC_ALL=C run grep -rnIE "$pat" "$REPO/client" "$REPO/server" "$REPO/scripts" "$REPO/install.sh"
+  [ -z "$output" ] || { printf '%s\n' "$output"; false; }
+}

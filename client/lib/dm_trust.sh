@@ -161,15 +161,18 @@ dm_approve_send() {
   IFS=$'\t' read -r name kind cpub hpub at origin need <<<"$row"
   key=$(dm_trust_key_file)
   if [[ $need == client* ]]; then
-    s=$(tr_sign "$key" "$(tr_msg client "$name" "$cpub")") && [[ -n $s ]] || dm_die "could not sign (is $key readable?)"
+    s=$(tr_sign "$key" "$(tr_msg client "$name" "$cpub")") || s=""
+    [[ -n $s ]] || dm_die "could not sign (is $key readable?)"
     payload+="client $s"$'\n'
   fi
   if [[ $need == *host && $hpub != - ]]; then
-    s=$(tr_sign "$key" "$(tr_msg host "$name" "$hpub")") && [[ -n $s ]] || dm_die "could not sign the host key"
+    s=$(tr_sign "$key" "$(tr_msg host "$name" "$hpub")") || s=""
+    [[ -n $s ]] || dm_die "could not sign the host key"
     payload+="host $s"$'\n'
   fi
   if ((as_signer)); then
-    s=$(tr_sign "$key" "$(tr_msg signer "$name" "$cpub")") && [[ -n $s ]] || dm_die "could not sign"
+    s=$(tr_sign "$key" "$(tr_msg signer "$name" "$cpub")") || s=""
+    [[ -n $s ]] || dm_die "could not sign"
     payload+="signer $s"$'\n'
   fi
   printf '%s' "$payload" | ssh -o ConnectTimeout=6 hub-admin approve "$name" >/dev/null || dm_die "the hub refused the approval of $name"
@@ -423,8 +426,10 @@ dm_trust_revoke() {
   rm -f "$tmp"
   read -r serial _ <<<"$(tr_epoch_state "$allowed")"
   serial=$((serial + 1))
-  sig=$(tr_sign "$(dm_trust_key_file)" "$(tr_msg revoke "$name" "$key")") && [[ -n $sig ]] || dm_die "could not sign the revocation"
-  esig=$(tr_sign "$(dm_trust_key_file)" "$(tr_msg epoch "$serial" "$hash")") && [[ -n $esig ]] || dm_die "could not sign the epoch"
+  sig=$(tr_sign "$(dm_trust_key_file)" "$(tr_msg revoke "$name" "$key")") || sig=""
+  [[ -n $sig ]] || dm_die "could not sign the revocation"
+  esig=$(tr_sign "$(dm_trust_key_file)" "$(tr_msg epoch "$serial" "$hash")") || esig=""
+  [[ -n $esig ]] || dm_die "could not sign the epoch"
   printf 'revoke %s\nepoch %s\n' "$sig" "$esig" | ssh -o ConnectTimeout=6 hub-admin revoke "$name" >/dev/null ||
     dm_die "the hub refused the revocation of $name (out of date? run: dm refresh)"
   dm_info "revocation of $name signed (epoch $serial)"
