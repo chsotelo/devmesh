@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-10-23
+
 ### Changed
 
 - `dm` now opens a VS Code like terminal panel on tmux (3.2+): the status bar is the machine
