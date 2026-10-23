@@ -22,6 +22,8 @@ var english = map[string]string{
 	"M_HINT_CREATE":           "create",
 	"M_HINT_OPEN":             "open",
 	"M_LOADING":               "loading…",
+	"M_LY_BTN_DELETE":         "Delete",
+	"M_LY_BTN_NEW":            "New",
 	"M_MACHINE_MANY":          "%s machines",
 	"M_MACHINE_ONE":           "%s machine",
 	"M_MM_MAIN":               "Open its main terminal",

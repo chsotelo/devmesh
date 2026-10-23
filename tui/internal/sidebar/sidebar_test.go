@@ -44,6 +44,11 @@ func (f *fakeSource) Hold(_ context.Context, host, kind string) error {
 	return nil
 }
 
+func (f *fakeSource) Act(_ context.Context, host, action string) error {
+	f.record("act " + host + " " + action)
+	return nil
+}
+
 func (f *fakeSource) record(call string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -104,19 +109,22 @@ func TestViewListsOneRowPerSessionWithinTheWidth(t *testing.T) {
 	view := m.View()
 	lines := strings.Split(view, "\n")
 
-	if len(lines) != 3 {
-		t.Fatalf("want 3 rows, got %d:\n%s", len(lines), view)
+	if len(lines) != 4 {
+		t.Fatalf("want the buttons and 3 rows, got %d:\n%s", len(lines), view)
 	}
 	for _, line := range lines {
 		if got := lipgloss.Width(line); got > testWidth {
 			t.Fatalf("line wider than the pane (%d): %q", got, line)
 		}
 	}
-	if !strings.Contains(lines[0], "▎") || !strings.Contains(lines[0], ">_ api") {
-		t.Fatalf("shown row = %q", lines[0])
+	if !strings.Contains(lines[0], "+ New") || !strings.Contains(lines[0], "Delete") {
+		t.Fatalf("button line = %q", lines[0])
 	}
-	if !strings.Contains(lines[2], "…") {
-		t.Fatalf("long name must be cut: %q", lines[2])
+	if !strings.Contains(lines[1], "▎") || !strings.Contains(lines[1], ">_ api") {
+		t.Fatalf("shown row = %q", lines[1])
+	}
+	if !strings.Contains(lines[3], "…") {
+		t.Fatalf("long name must be cut: %q", lines[3])
 	}
 }
 
@@ -151,7 +159,7 @@ func TestEnterAndClickShowTheRowAndFocusIt(t *testing.T) {
 	m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	run(m, cmd)
-	_, cmd = m.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: 3, Y: 0})
+	_, cmd = m.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: 3, Y: 1})
 	run(m, cmd)
 
 	want := "show lap web 2 focus;show lap main 1 focus"
@@ -221,13 +229,13 @@ func TestWheelAndCursorKeepTheSelectionVisible(t *testing.T) {
 	}
 	src := &fakeSource{snap: machine(feed.ReachOnline, terms...), shown: "a"}
 	m := loaded(t, src)
-	m.height = 3
+	m.height = 4
 	poll(m, src)
 
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")})
 
 	lines := strings.Split(m.View(), "\n")
-	if len(lines) != 3 || !strings.Contains(lines[2], "f") {
+	if len(lines) != 4 || !strings.Contains(lines[3], "f") {
 		t.Fatalf("view = %q", m.View())
 	}
 }
@@ -240,7 +248,7 @@ func TestActionErrorsShowOnTheLastLine(t *testing.T) {
 	m.Update(doneMsg{err: context.DeadlineExceeded})
 
 	lines := strings.Split(m.View(), "\n")
-	if len(lines) != 2 || !strings.Contains(lines[1], "deadline") {
+	if len(lines) != 3 || !strings.Contains(lines[2], "deadline") {
 		t.Fatalf("view = %q", m.View())
 	}
 }
@@ -256,7 +264,7 @@ func TestRowsShowTheProgramNextToTheNameLikeVSCode(t *testing.T) {
 	m := loaded(t, src)
 	poll(m, src)
 
-	lines := strings.Split(m.View(), "\n")
+	lines := strings.Split(m.View(), "\n")[buttonLines:]
 	if !strings.Contains(lines[0], "api  claude") {
 		t.Fatalf("program must follow the name: %q", lines[0])
 	}
@@ -267,5 +275,29 @@ func TestRowsShowTheProgramNextToTheNameLikeVSCode(t *testing.T) {
 		if got := lipgloss.Width(line); got > testWidth {
 			t.Fatalf("line wider than the pane (%d): %q", got, line)
 		}
+	}
+}
+
+func TestTheTopButtonsAndTheirKeysAddAndDeleteTerminals(t *testing.T) {
+	src := &fakeSource{snap: machine(feed.ReachOnline, term("main", "1", "")), shown: "main"}
+	m := loaded(t, src)
+	poll(m, src)
+	src.calls = nil
+	buttons := m.buttons()
+
+	for _, msg := range []tea.Msg{
+		tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: buttons[0].from, Y: 0},
+		tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: buttons[1].to - 1, Y: 0},
+		tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: 0, Y: 0},
+		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")},
+		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")},
+	} {
+		_, cmd := m.Update(msg)
+		run(m, cmd)
+	}
+
+	want := "act lap add;act lap delete;act lap add;act lap delete"
+	if got := strings.Join(src.calls, ";"); got != want {
+		t.Fatalf("calls = %q, want %q", got, want)
 	}
 }

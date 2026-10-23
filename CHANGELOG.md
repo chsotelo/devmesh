@@ -7,6 +7,20 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.9] - 2026-10-23
+
+### Changed
+
+- "+ New" and "Delete" moved from the status bar to the top of the terminal list, like the
+  VS Code terminal panel (keys `n`/`+` and `x`/`Delete` in the list). The status bar keeps
+  only Exit (and the list toggle on narrow screens).
+
+### Fixed
+
+- The workspace could flicker on Android: every size report re-applied the list width,
+  and each resize redraws the whole window. The list is now resized only when its width
+  changed.
+
 ## [0.9.8] - 2026-10-23
 
 ### Fixed

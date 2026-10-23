@@ -240,6 +240,19 @@ dm_ly_click() {
   esac
 }
 
+# _ws act ACTION HOST: a button of the list (add, delete) on the window of that machine.
+dm_ly_act() {
+  local what=${1:-} host=${2:-} wid
+  dm_ly_need_tmux
+  dm_ly_check_host "$host"
+  wid=$(dm_ly_win_of_host "$host")
+  dm_ly_check_wid "$wid"
+  case $what in
+    add | delete) dm_ly_click "$what" "$wid" ;;
+    *) dm_die "unknown button: $what" ;;
+  esac
+}
+
 # _ws layout: keep the list at its width, and the terminal alone on narrow screens.
 # Runs from the client-resized / client-attached / after-select-window hooks, which fire
 # together: zooming toggles, so only one run may apply the layout.
@@ -283,7 +296,11 @@ dm_ly_apply_wide() {
     tmux set-option -w -t "$1" -u @dm_auto_zoom
     dm_ly_zoomed "$1" && tmux resize-pane -Z -t "$2"
   fi
-  dm_ly_zoomed "$1" || tmux resize-pane -t "$3" -x "$DM_LY_SIDE_COLS"
+  # Only when the list lost its width: every resize redraws the whole window, and some
+  # terminals (Android) report size changes often, which made the screen flicker.
+  if ! dm_ly_zoomed "$1" && [[ $(tmux display-message -p -t "$3" '#{pane_width}') != "$DM_LY_SIDE_COLS" ]]; then
+    tmux resize-pane -t "$3" -x "$DM_LY_SIDE_COLS"
+  fi
   return 0
 }
 
@@ -300,6 +317,7 @@ dm_ly_dispatch() {
     add) dm_ly_add "$@" ;;
     kill) dm_ly_kill "$@" ;;
     click) dm_ly_click "$@" ;;
+    act) dm_ly_act "$@" ;;
     layout) dm_ly_layout ;;
     *) dm_die "unknown workspace command: $sub" ;;
   esac
@@ -312,8 +330,6 @@ dm_ly_tm() { tmux -L "$DM_WS_SOCKET" "$@"; }
 dm_ly_bind() {
   local base="'$BASH' '$DM_SELF' _ws"
   # Button labels in the user's language (the status bar reads them as options).
-  dm_ly_tm set-option -g @dm_b_new "$M_LY_BTN_NEW"
-  dm_ly_tm set-option -g @dm_b_delete "$M_LY_BTN_DELETE"
   dm_ly_tm set-option -g @dm_b_exit "$M_LY_BTN_EXIT"
   dm_ly_tm set-option -g @dm_b_list "$M_LY_BTN_LIST"
   dm_ly_tm bind-key -n MouseDown1Status if-shell -F '#{==:#{mouse_status_range},window}' \

@@ -126,6 +126,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return m.choose(m.cursor)
 	case "r":
 		return m.startPoll()
+	case "n", "+":
+		return m.actCmd(source.ActAdd)
+	case "x", "delete":
+		return m.actCmd(source.ActDelete)
 	}
 	return nil
 }
@@ -157,7 +161,20 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	case msg.Button == tea.MouseButtonWheelDown:
 		m.scroll(wheelStep)
 	case msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft:
-		return m.choose(m.top + msg.Y)
+		if msg.Y < buttonLines {
+			return m.clickButton(msg.X)
+		}
+		return m.choose(m.top + msg.Y - buttonLines)
+	}
+	return nil
+}
+
+// clickButton runs the button of the top line under column x.
+func (m *Model) clickButton(x int) tea.Cmd {
+	for _, button := range m.buttons() {
+		if x >= button.from && x < button.to {
+			return m.actCmd(button.action)
+		}
 	}
 	return nil
 }
@@ -166,12 +183,13 @@ func (m *Model) scroll(lines int) {
 	m.top = min(max(m.top+lines, 0), max(len(m.rows)-m.listHeight(), 0))
 }
 
-// listHeight is how many rows fit: all lines, minus the error line when there is one.
+// listHeight is how many rows fit: all lines but the buttons, and the error line when there is one.
 func (m *Model) listHeight() int {
+	height := m.height - buttonLines
 	if m.err != "" {
-		return max(m.height-1, 1)
+		height--
 	}
-	return max(m.height, 1)
+	return max(height, 1)
 }
 
 func (m *Model) keepVisible() {

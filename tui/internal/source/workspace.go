@@ -13,10 +13,14 @@ const (
 	subShow      = "show"
 	subHold      = "hold"
 	subShown     = "shown"
+	subAct       = "act"
 	flagFocus    = "focus"
 	// HoldEmpty and HoldOffline are the messages that can replace a terminal.
 	HoldEmpty   = "empty"
 	HoldOffline = "offline"
+	// ActAdd and ActDelete are the buttons of the list: a new terminal, delete the shown one.
+	ActAdd    = "add"
+	ActDelete = "delete"
 )
 
 // FeedHost reads one machine with "dm _feed HOST".
@@ -78,5 +82,14 @@ func (d *Dm) Hold(ctx context.Context, host, kind string) error {
 		return ErrInvalidArgument
 	}
 	_, err := d.output(ctx, actionTimeout, cmdWorkspace, subHold, host, kind)
+	return err
+}
+
+// Act runs a button of the list of a machine: ActAdd or ActDelete.
+func (d *Dm) Act(ctx context.Context, host, action string) error {
+	if !ValidHost(host) || (action != ActAdd && action != ActDelete) {
+		return ErrInvalidArgument
+	}
+	_, err := d.output(ctx, actionTimeout, cmdWorkspace, subAct, action, host)
 	return err
 }

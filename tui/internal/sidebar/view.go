@@ -8,6 +8,7 @@ import (
 
 	"github.com/chsotelo/devmesh/tui/internal/feed"
 	"github.com/chsotelo/devmesh/tui/internal/i18n"
+	"github.com/chsotelo/devmesh/tui/internal/source"
 	"github.com/chsotelo/devmesh/tui/internal/theme"
 )
 
@@ -21,14 +22,53 @@ const (
 	fixedCols  = 8 // bar, space, icon (2), space, space, dot, space
 	minNameCol = 1
 	cmdGap     = "  "
+	// buttonLines is the top line with the buttons; the rows start below it.
+	buttonLines = 1
+	addLabel    = "+ "
+	buttonGap   = "  "
 )
+
+// button is a clickable label of the top line, from column from up to (not including) to.
+type button struct {
+	label  string
+	action string
+	from   int
+	to     int
+}
+
+// buttons lays out the top line: " + New  Delete".
+func (m *Model) buttons() []button {
+	labels := []struct{ label, action string }{
+		{addLabel + m.cat.Text(i18n.KeyBtnNew), source.ActAdd},
+		{m.cat.Text(i18n.KeyBtnDelete), source.ActDelete},
+	}
+	at := len(space)
+	out := make([]button, 0, len(labels))
+	for _, item := range labels {
+		width := lipgloss.Width(item.label)
+		out = append(out, button{label: item.label, action: item.action, from: at, to: at + width})
+		at += width + len(buttonGap)
+	}
+	return out
+}
+
+func (m *Model) buttonLine() string {
+	parts := []string{space}
+	for i, b := range m.buttons() {
+		if i > 0 {
+			parts = append(parts, buttonGap)
+		}
+		parts = append(parts, theme.Accent().Render(b.label))
+	}
+	return ansi.Truncate(strings.Join(parts, ""), m.width, ellipsis)
+}
 
 // View draws the list.
 func (m *Model) View() string {
 	if m.width <= 0 {
 		return ""
 	}
-	var lines []string
+	lines := []string{m.buttonLine()}
 	switch {
 	case !m.loaded:
 		lines = append(lines, m.message(i18n.KeyLoading))
@@ -37,7 +77,7 @@ func (m *Model) View() string {
 	case len(m.rows) == 0:
 		lines = append(lines, m.message(i18n.KeyNoTerminals))
 	default:
-		lines = m.rowLines()
+		lines = append(lines, m.rowLines()...)
 	}
 	if m.err != "" {
 		lines = append(lines, theme.Error().Render(ansi.Truncate(space+m.err, m.width, ellipsis)))
