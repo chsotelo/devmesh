@@ -7,6 +7,20 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.13] - 2026-10-24
+
+### Fixed
+
+- A machine that could not be reached for a moment (a Mac waking from sleep, a phone
+  changing networks) no longer closes the terminal pane of the workspace: it keeps
+  reconnecting, and a missing pane is made again. Before, every tap then failed with
+  "no workspace window".
+- Back online, the workspace shows again the terminal it was showing before.
+- A device added after the workspace was built gets its tab on its own (within a minute,
+  or when dm is opened again); no restart needed.
+- A device just enrolled fetches the panel on its first "dm" (the join line leaves the
+  binary out), so it shows the same layout as every other device instead of the old panel.
+
 ## [0.9.12] - 2026-10-24
 
 ### Changed

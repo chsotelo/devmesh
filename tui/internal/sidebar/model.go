@@ -84,6 +84,7 @@ type Model struct {
 	online  bool
 	polling bool
 	held    string
+	resume  string // the terminal shown before the machine went offline
 	misses  int
 	err     string
 }
