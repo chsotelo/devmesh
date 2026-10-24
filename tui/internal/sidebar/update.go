@@ -168,7 +168,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 		if msg.Y < buttonLines {
 			return nil
 		}
-		return m.choose(m.top + msg.Y - buttonLines)
+		return m.choose(m.top + (msg.Y-buttonLines)/rowHeight)
 	}
 	return nil
 }
@@ -187,13 +187,14 @@ func (m *Model) scroll(lines int) {
 	m.top = min(max(m.top+lines, 0), max(len(m.rows)-m.listHeight(), 0))
 }
 
-// listHeight is how many rows fit: all lines but the buttons, and the error line when there is one.
+// listHeight is how many terminals fit: all lines but the buttons (and the error line when
+// there is one), rowHeight lines each.
 func (m *Model) listHeight() int {
 	height := m.height - buttonLines
 	if m.err != "" {
 		height--
 	}
-	return max(height, 1)
+	return max(height/rowHeight, 1)
 }
 
 func (m *Model) keepVisible() {

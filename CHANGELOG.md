@@ -7,6 +7,16 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.12] - 2026-10-24
+
+### Changed
+
+- Each terminal of the list is three lines tall (its name between two padding lines with
+  the same background), a comfortable touch target; a tap anywhere on it opens it.
+- A list longer than the screen shows a scrollbar and scrolls one terminal per wheel step
+  or swipe, on its own: the terminal on the right keeps its position (it scrolls its own
+  history).
+
 ## [0.9.11] - 2026-10-23
 
 ### Changed

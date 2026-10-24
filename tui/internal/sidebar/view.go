@@ -22,6 +22,10 @@ const (
 	fixedCols  = 8 // bar, space, icon (2), space, space, dot, space
 	minNameCol = 1
 	cmdGap     = "  "
+	// rowHeight is the lines of one terminal of the list: its line between two padding lines.
+	rowHeight   = 3
+	scrollTrack = "│"
+	scrollThumb = "┃"
 	// The buttons are buttonHeight lines tall (a padding line above and below the label,
 	// a comfortable touch target), then one empty line; the rows start below.
 	buttonHeight = 3
@@ -116,27 +120,78 @@ func (m *Model) message(key string) string {
 
 func (m *Model) rowLines() []string {
 	end := min(m.top+m.listHeight(), len(m.rows))
-	lines := make([]string, 0, end-m.top)
+	marks := m.scrollMarks(end - m.top)
+	lines := make([]string, 0, (end-m.top)*rowHeight)
 	for i := m.top; i < end; i++ {
-		lines = append(lines, m.rowLine(i))
+		lines = append(lines, m.rowBlock(i, marks[(i-m.top)*rowHeight:])...)
 	}
 	return lines
 }
 
-// rowLine is: bar, icon (machine color), name, program (dim), agent dot, like a VS Code
-// terminal list ("api  claude"). The cursor row has the subtle background.
-func (m *Model) rowLine(index int) string {
+// scrollMarks is the last column of each visible line: a scrollbar when the list does not
+// fit (thumb where the view is), else blank.
+func (m *Model) scrollMarks(visibleRows int) []string {
+	lines := visibleRows * rowHeight
+	marks := make([]string, lines)
+	total := len(m.rows) * rowHeight
+	for i := range marks {
+		marks[i] = space
+	}
+	if len(m.rows) <= visibleRows || total == 0 {
+		return marks
+	}
+	from := m.top * rowHeight * lines / total
+	size := max(lines*lines/total, 1)
+	for i := range marks {
+		marks[i] = theme.Faint().Render(scrollTrack)
+		if i >= from && i < from+size {
+			marks[i] = theme.Dim().Render(scrollThumb)
+		}
+	}
+	return marks
+}
+
+// rowBlock is one terminal, rowHeight lines tall (a comfortable touch target): the row
+// line in the middle, padding with the same background above and below.
+func (m *Model) rowBlock(index int, marks []string) []string {
+	block := make([]string, rowHeight)
+	for line := range block {
+		if line == rowHeight/2 {
+			block[line] = m.rowLine(index, marks[line])
+		} else {
+			block[line] = m.rowPadding(index, marks[line])
+		}
+	}
+	return block
+}
+
+func (m *Model) rowStyles(index int) (background, bar lipgloss.Style, mark string) {
 	row := m.rows[index]
-	isShown := row.Session == m.shown
-	background := lipgloss.NewStyle()
+	background = lipgloss.NewStyle()
 	if index == m.cursor {
 		background = background.Background(lipgloss.Color(theme.ColorSelection))
 	}
+	bar, mark = theme.Faint(), idleBar
+	if row.Session == m.shown {
+		bar, mark = theme.Accent(), activeBar
+	}
+	return background, bar, mark
+}
+
+func (m *Model) rowPadding(index int, scroll string) string {
+	background, barStyle, bar := m.rowStyles(index)
+	fill := strings.Repeat(space, max(m.width-len(space)-2, 0))
+	return paint(barStyle, background, bar+space) + paint(theme.Faint(), background, fill) + scroll
+}
+
+// rowLine is: bar, icon (machine color), name, program (dim), agent dot, like a VS Code
+// terminal list ("api  claude"). The cursor row has the subtle background.
+func (m *Model) rowLine(index int, scroll string) string {
+	row := m.rows[index]
+	background, barStyle, bar := m.rowStyles(index)
 	nameStyle := theme.Dim()
-	barStyle := theme.Faint()
-	if isShown {
+	if row.Session == m.shown {
 		nameStyle = theme.Bold()
-		barStyle = theme.Accent()
 	}
 	textWidth := max(m.width-fixedCols, minNameCol)
 	name := ansi.Truncate(row.Session, textWidth, ellipsis)
@@ -145,17 +200,13 @@ func (m *Model) rowLine(index int) string {
 		command = cmdGap + ansi.Truncate(row.Command, room, ellipsis)
 	}
 	pad := strings.Repeat(space, max(textWidth-lipgloss.Width(name)-lipgloss.Width(command), 0))
-	bar := idleBar
-	if isShown {
-		bar = activeBar
-	}
 	parts := []string{
 		paint(barStyle, background, bar+space),
 		paint(theme.MachineColor(m.color), background, icon+space),
 		paint(nameStyle, background, name),
 		paint(theme.Faint(), background, command+pad+space),
 		paint(dotStyle(row.Agent), background, dotOf(row.Agent)),
-		paint(theme.Faint(), background, space),
+		scroll,
 	}
 	return strings.Join(parts, "")
 }

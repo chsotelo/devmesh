@@ -74,8 +74,13 @@ func term(session, window string, agent feed.AgentState) feed.Terminal {
 func loaded(t *testing.T, src *fakeSource) *Model {
 	t.Helper()
 	m := New(Options{Host: "lap", Source: src, Catalog: i18n.Fallback()})
-	m.width, m.height = testWidth, 10
+	m.width, m.height = testWidth, 30
 	return m
+}
+
+// rowText is the line with the name of the i-th visible terminal.
+func rowText(lines []string, i int) string {
+	return lines[buttonLines+i*rowHeight+rowHeight/2]
 }
 
 // poll applies a reading and runs the commands it returns, feeding results back.
@@ -111,7 +116,7 @@ func TestViewListsOneRowPerSessionWithinTheWidth(t *testing.T) {
 	view := m.View()
 	lines := strings.Split(view, "\n")
 
-	if len(lines) != buttonLines+3 {
+	if len(lines) != buttonLines+3*rowHeight {
 		t.Fatalf("want the buttons and 3 rows, got %d:\n%s", len(lines), view)
 	}
 	for _, line := range lines {
@@ -119,12 +124,14 @@ func TestViewListsOneRowPerSessionWithinTheWidth(t *testing.T) {
 			t.Fatalf("line wider than the pane (%d): %q", got, line)
 		}
 	}
-	rows := lines[buttonLines:]
-	if !strings.Contains(rows[0], "▎") || !strings.Contains(rows[0], ">_ api") {
-		t.Fatalf("shown row = %q", rows[0])
+	if row := rowText(lines, 0); !strings.Contains(row, "▎") || !strings.Contains(row, ">_ api") {
+		t.Fatalf("shown row = %q", row)
 	}
-	if !strings.Contains(rows[2], "…") {
-		t.Fatalf("long name must be cut: %q", rows[2])
+	if !strings.Contains(lines[buttonLines], "▎") || strings.Contains(lines[buttonLines], "api") {
+		t.Fatalf("the padding line above a row keeps its bar and has no text: %q", lines[buttonLines])
+	}
+	if row := rowText(lines, 2); !strings.Contains(row, "…") {
+		t.Fatalf("long name must be cut: %q", row)
 	}
 }
 
@@ -229,13 +236,13 @@ func TestWheelAndCursorKeepTheSelectionVisible(t *testing.T) {
 	}
 	src := &fakeSource{snap: machine(feed.ReachOnline, terms...), shown: "a"}
 	m := loaded(t, src)
-	m.height = buttonLines + 3
+	m.height = buttonLines + 3*rowHeight
 	poll(m, src)
 
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")})
 
 	lines := strings.Split(m.View(), "\n")
-	if len(lines) != buttonLines+3 || !strings.Contains(lines[buttonLines+2], "f") {
+	if len(lines) != buttonLines+3*rowHeight || !strings.Contains(rowText(lines, 2), "f") {
 		t.Fatalf("view = %q", m.View())
 	}
 }
@@ -248,7 +255,7 @@ func TestActionErrorsShowOnTheLastLine(t *testing.T) {
 	m.Update(doneMsg{err: context.DeadlineExceeded})
 
 	lines := strings.Split(m.View(), "\n")
-	if len(lines) != buttonLines+2 || !strings.Contains(lines[buttonLines+1], "deadline") {
+	if len(lines) != buttonLines+rowHeight+1 || !strings.Contains(lines[len(lines)-1], "deadline") {
 		t.Fatalf("view = %q", m.View())
 	}
 }
@@ -264,7 +271,8 @@ func TestRowsShowTheProgramNextToTheNameLikeVSCode(t *testing.T) {
 	m := loaded(t, src)
 	poll(m, src)
 
-	lines := strings.Split(m.View(), "\n")[buttonLines:]
+	view := strings.Split(m.View(), "\n")
+	lines := []string{rowText(view, 0), rowText(view, 1)}
 	if !strings.Contains(lines[0], "api  claude") {
 		t.Fatalf("program must follow the name: %q", lines[0])
 	}
@@ -378,5 +386,32 @@ func TestTheReadingIsRememberedOnlyWhenItChanges(t *testing.T) {
 
 	if mem.saves != 2 || len(mem.saved.Rows) != 2 || mem.saved.Shown != "api" {
 		t.Fatalf("saves = %d, saved = %+v", mem.saves, mem.saved)
+	}
+}
+
+func TestATapAnywhereOnARowChoosesItAndALongListShowsAScrollbar(t *testing.T) {
+	var terms []feed.Terminal
+	for _, name := range []string{"a", "b", "c", "d", "e", "f"} {
+		terms = append(terms, term(name, "1", ""))
+	}
+	src := &fakeSource{snap: machine(feed.ReachOnline, terms...), shown: "a"}
+	m := loaded(t, src)
+	m.height = buttonLines + 3*rowHeight
+	poll(m, src)
+
+	lines := strings.Split(m.View(), "\n")
+	if !strings.HasSuffix(lines[buttonLines], scrollThumb) || !strings.HasSuffix(lines[len(lines)-1], scrollTrack) {
+		t.Fatalf("scrollbar: %q", lines[buttonLines:])
+	}
+	for _, y := range []int{buttonLines + rowHeight, buttonLines + 2*rowHeight - 1} {
+		_, cmd := m.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: 5, Y: y})
+		run(m, cmd)
+	}
+	if got := strings.Join(src.calls, ";"); got != "show lap b 1 focus;show lap b 1 focus" {
+		t.Fatalf("calls = %q", got)
+	}
+	m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown})
+	if m.top != 1 {
+		t.Fatalf("wheel moves the list one terminal: top = %d", m.top)
 	}
 }
