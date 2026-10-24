@@ -109,7 +109,7 @@ func TestViewListsOneRowPerSessionWithinTheWidth(t *testing.T) {
 	view := m.View()
 	lines := strings.Split(view, "\n")
 
-	if len(lines) != 4 {
+	if len(lines) != buttonLines+3 {
 		t.Fatalf("want the buttons and 3 rows, got %d:\n%s", len(lines), view)
 	}
 	for _, line := range lines {
@@ -117,14 +117,12 @@ func TestViewListsOneRowPerSessionWithinTheWidth(t *testing.T) {
 			t.Fatalf("line wider than the pane (%d): %q", got, line)
 		}
 	}
-	if !strings.Contains(lines[0], "+ New") || !strings.Contains(lines[0], "Delete") {
-		t.Fatalf("button line = %q", lines[0])
+	rows := lines[buttonLines:]
+	if !strings.Contains(rows[0], "▎") || !strings.Contains(rows[0], ">_ api") {
+		t.Fatalf("shown row = %q", rows[0])
 	}
-	if !strings.Contains(lines[1], "▎") || !strings.Contains(lines[1], ">_ api") {
-		t.Fatalf("shown row = %q", lines[1])
-	}
-	if !strings.Contains(lines[3], "…") {
-		t.Fatalf("long name must be cut: %q", lines[3])
+	if !strings.Contains(rows[2], "…") {
+		t.Fatalf("long name must be cut: %q", rows[2])
 	}
 }
 
@@ -159,7 +157,7 @@ func TestEnterAndClickShowTheRowAndFocusIt(t *testing.T) {
 	m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	run(m, cmd)
-	_, cmd = m.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: 3, Y: 1})
+	_, cmd = m.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: 3, Y: buttonLines})
 	run(m, cmd)
 
 	want := "show lap web 2 focus;show lap main 1 focus"
@@ -229,13 +227,13 @@ func TestWheelAndCursorKeepTheSelectionVisible(t *testing.T) {
 	}
 	src := &fakeSource{snap: machine(feed.ReachOnline, terms...), shown: "a"}
 	m := loaded(t, src)
-	m.height = 4
+	m.height = buttonLines + 3
 	poll(m, src)
 
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")})
 
 	lines := strings.Split(m.View(), "\n")
-	if len(lines) != 4 || !strings.Contains(lines[3], "f") {
+	if len(lines) != buttonLines+3 || !strings.Contains(lines[buttonLines+2], "f") {
 		t.Fatalf("view = %q", m.View())
 	}
 }
@@ -248,7 +246,7 @@ func TestActionErrorsShowOnTheLastLine(t *testing.T) {
 	m.Update(doneMsg{err: context.DeadlineExceeded})
 
 	lines := strings.Split(m.View(), "\n")
-	if len(lines) != 3 || !strings.Contains(lines[2], "deadline") {
+	if len(lines) != buttonLines+2 || !strings.Contains(lines[buttonLines+1], "deadline") {
 		t.Fatalf("view = %q", m.View())
 	}
 }
@@ -287,8 +285,9 @@ func TestTheTopButtonsAndTheirKeysAddAndDeleteTerminals(t *testing.T) {
 
 	for _, msg := range []tea.Msg{
 		tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: buttons[0].from, Y: 0},
-		tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: buttons[1].to - 1, Y: 0},
-		tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: 0, Y: 0},
+		tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: buttons[1].to - 1, Y: buttonHeight - 1},
+		tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: 0, Y: 1},
+		tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: buttons[0].from, Y: buttonHeight},
 		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")},
 		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")},
 	} {
@@ -299,5 +298,33 @@ func TestTheTopButtonsAndTheirKeysAddAndDeleteTerminals(t *testing.T) {
 	want := "act lap add;act lap delete;act lap add;act lap delete"
 	if got := strings.Join(src.calls, ";"); got != want {
 		t.Fatalf("calls = %q, want %q", got, want)
+	}
+}
+
+func TestButtonsAreTallBoxesThatFillTheListWidthWithTheLabelCentered(t *testing.T) {
+	src := &fakeSource{snap: machine(feed.ReachOnline, term("main", "1", "")), shown: "main"}
+	m := loaded(t, src)
+	poll(m, src)
+
+	lines := strings.Split(m.View(), "\n")
+	buttons := m.buttons()
+
+	for line := 0; line < buttonHeight; line++ {
+		if got := lipgloss.Width(lines[line]); got != testWidth-buttonMargin {
+			t.Fatalf("button line %d is %d wide: %q", line, got, lines[line])
+		}
+	}
+	if strings.TrimSpace(lines[0]) != "" || strings.TrimSpace(lines[buttonHeight-1]) != "" {
+		t.Fatalf("the padding lines must be empty: %q", lines[:buttonHeight])
+	}
+	middle := lines[buttonHeight/2]
+	if !strings.Contains(middle, "+ New") || !strings.Contains(middle, "Delete") {
+		t.Fatalf("labels line = %q", middle)
+	}
+	if at := strings.Index(middle, "+ New"); at <= buttons[0].from {
+		t.Fatalf("the label must have padding before it: %q", middle)
+	}
+	if lines[buttonHeight] != "" {
+		t.Fatalf("an empty line must separate the buttons from the list: %q", lines[buttonHeight])
 	}
 }

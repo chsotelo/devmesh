@@ -22,13 +22,16 @@ const (
 	fixedCols  = 8 // bar, space, icon (2), space, space, dot, space
 	minNameCol = 1
 	cmdGap     = "  "
-	// buttonLines is the top line with the buttons; the rows start below it.
-	buttonLines = 1
-	addLabel    = "+ "
-	buttonGap   = "  "
+	// The buttons are buttonHeight lines tall (a padding line above and below the label,
+	// a comfortable touch target), then one empty line; the rows start below.
+	buttonHeight = 3
+	buttonLines  = buttonHeight + 1
+	buttonMargin = 1
+	buttonGap    = 1
+	addLabel     = "+ "
 )
 
-// button is a clickable label of the top line, from column from up to (not including) to.
+// button is a clickable box of the top lines, from column from up to (not including) to.
 type button struct {
 	label  string
 	action string
@@ -36,31 +39,53 @@ type button struct {
 	to     int
 }
 
-// buttons lays out the top line: " + New  Delete".
+// buttons splits the width between the buttons: "[  + New  ] [ Delete ]".
 func (m *Model) buttons() []button {
 	labels := []struct{ label, action string }{
 		{addLabel + m.cat.Text(i18n.KeyBtnNew), source.ActAdd},
 		{m.cat.Text(i18n.KeyBtnDelete), source.ActDelete},
 	}
-	at := len(space)
+	room := m.width - 2*buttonMargin - buttonGap*(len(labels)-1)
+	at := buttonMargin
 	out := make([]button, 0, len(labels))
-	for _, item := range labels {
-		width := lipgloss.Width(item.label)
+	for i, item := range labels {
+		width := max(room/len(labels), 1)
+		if i == len(labels)-1 {
+			width = max(room-width*(len(labels)-1), 1)
+		}
 		out = append(out, button{label: item.label, action: item.action, from: at, to: at + width})
-		at += width + len(buttonGap)
+		at += width + buttonGap
 	}
 	return out
 }
 
-func (m *Model) buttonLine() string {
-	parts := []string{space}
-	for i, b := range m.buttons() {
-		if i > 0 {
-			parts = append(parts, buttonGap)
+// buttonBlock draws the buttons: the label centered on the middle line, padding around.
+func (m *Model) buttonBlock() []string {
+	buttons := m.buttons()
+	lines := make([]string, 0, buttonLines)
+	for line := 0; line < buttonHeight; line++ {
+		parts := []string{strings.Repeat(space, buttonMargin)}
+		for i, b := range buttons {
+			if i > 0 {
+				parts = append(parts, strings.Repeat(space, buttonGap))
+			}
+			text := ""
+			if line == buttonHeight/2 {
+				text = b.label
+			}
+			parts = append(parts, theme.Button().Render(centered(text, b.to-b.from)))
 		}
-		parts = append(parts, theme.Accent().Render(b.label))
+		lines = append(lines, ansi.Truncate(strings.Join(parts, ""), m.width, ""))
 	}
-	return ansi.Truncate(strings.Join(parts, ""), m.width, ellipsis)
+	return append(lines, "")
+}
+
+// centered pads text to width with the label in the middle (cut when it does not fit).
+func centered(text string, width int) string {
+	text = ansi.Truncate(text, width, "")
+	left := (width - lipgloss.Width(text)) / 2
+	right := width - lipgloss.Width(text) - left
+	return strings.Repeat(space, left) + text + strings.Repeat(space, right)
 }
 
 // View draws the list.
@@ -68,7 +93,7 @@ func (m *Model) View() string {
 	if m.width <= 0 {
 		return ""
 	}
-	lines := []string{m.buttonLine()}
+	lines := m.buttonBlock()
 	switch {
 	case !m.loaded:
 		lines = append(lines, m.message(i18n.KeyLoading))
