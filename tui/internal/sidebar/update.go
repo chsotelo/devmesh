@@ -161,8 +161,11 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	case msg.Button == tea.MouseButtonWheelDown:
 		m.scroll(wheelStep)
 	case msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft:
-		if msg.Y < buttonLines {
+		if msg.Y < buttonHeight {
 			return m.clickButton(msg.X)
+		}
+		if msg.Y < buttonLines {
+			return nil
 		}
 		return m.choose(m.top + msg.Y - buttonLines)
 	}

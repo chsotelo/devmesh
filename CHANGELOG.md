@@ -7,6 +7,14 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.10] - 2026-10-23
+
+### Changed
+
+- The list buttons are larger touch targets: three lines tall with a background, the
+  label centered, filling the list width, and an empty line before the terminals. Exit
+  and the narrow-screen buttons in the status bar get wider padding.
+
 ## [0.9.9] - 2026-10-23
 
 ### Changed
