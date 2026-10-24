@@ -7,6 +7,23 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.11] - 2026-10-23
+
+### Changed
+
+- The status bar is three lines tall: machine tabs and Exit (and the list toggle on
+  phones) are large touch targets on tablet, phone and desktop alike.
+- The terminal list remembers its last reading per machine: a new workspace draws the
+  list and opens the last terminal at once instead of "Loading…" while the machine
+  answers. The language catalog is cached the same way.
+
+### Fixed
+
+- The workspace jumped on its first frames: it was built at 160x45 and laid out for the
+  real screen only after attaching. It is now built at the size of the terminal and laid
+  out before it is shown.
+- Two tests meant to load the layout in a real tmux were running against the stub.
+
 ## [0.9.10] - 2026-10-23
 
 ### Changed

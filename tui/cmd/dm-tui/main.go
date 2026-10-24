@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
 
+	"github.com/chsotelo/devmesh/tui/internal/cache"
 	"github.com/chsotelo/devmesh/tui/internal/i18n"
 	"github.com/chsotelo/devmesh/tui/internal/source"
 	"github.com/chsotelo/devmesh/tui/internal/ui"
@@ -25,6 +26,9 @@ const (
 	exitFailure    = 1
 	versionFlag    = "--version"
 	tmuxVariable   = "TMUX"
+	langVariable   = "DM_LANG"
+	// catalogCachePrefix + DM_LANG is the cached catalog ("i18n-" when DM_LANG is unset).
+	catalogCachePrefix = "i18n-"
 )
 
 var errNoTerminal = errors.New("dm-tui needs an interactive terminal (run it through: dm)")
@@ -64,12 +68,28 @@ func runPanel() error {
 }
 
 // loadCatalog reads the active language from dm; the embedded English one fills any gap.
+// The last answer is cached: a new pane draws in the user's language at once, and dm is
+// asked again in the background for the next one.
 func loadCatalog(dm *source.Dm) i18n.Catalog {
-	ctx, cancel := context.WithTimeout(context.Background(), catalogTimeout)
-	defer cancel()
-	dump, err := dm.I18n(ctx)
+	name := catalogCachePrefix + os.Getenv(langVariable)
+	if cached, err := cache.Read(name); err == nil {
+		go func() { _, _ = fetchCatalog(dm, name) }()
+		return i18n.Parse(string(cached)).WithFallback()
+	}
+	dump, err := fetchCatalog(dm, name)
 	if err != nil {
 		return i18n.Fallback()
 	}
 	return i18n.Parse(dump).WithFallback()
+}
+
+func fetchCatalog(dm *source.Dm, name string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), catalogTimeout)
+	defer cancel()
+	dump, err := dm.I18n(ctx)
+	if err != nil {
+		return "", err
+	}
+	_ = cache.Write(name, []byte(dump))
+	return dump, nil
 }

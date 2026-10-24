@@ -225,14 +225,43 @@ setup() {
 }
 
 @test "the layout config parses in a real tmux and defines the selector tabs and buttons" {
-  real=$(PATH=${PATH#"$REPO/tests/stubs:"} command -v tmux) || skip "no real tmux"
+  real=$(PATH=${PATH#"$REPO/tests/stubs:"} type -P tmux) || skip "no real tmux"
   sock="$BATS_TEST_TMPDIR/tmux.sock"
   "$real" -S "$sock" -f /dev/null new-session -d -s t -x 100 -y 20
   run "$real" -S "$sock" source-file "$REPO/client/tmux/layout.conf"
   "$real" -S "$sock" kill-server
   [ -z "$output" ]
-  for range in menu exit; do grep -q "range=user|$range" "$REPO/client/tmux/layout.conf"; done
-  ! grep -q "range=user|add" "$REPO/client/tmux/layout.conf"
+}
+
+@test "the status bar is three lines: tabs and Exit on the middle one, padding of the same width around" {
+  real=$(PATH=${PATH#"$REPO/tests/stubs:"} type -P tmux) || skip "no real tmux"
+  sock="$BATS_TEST_TMPDIR/tmux.sock"
+  "$real" -S "$sock" -f /dev/null new-session -d -s t -n lap -x 100 -y 20
+  "$real" -S "$sock" set-option -g @dm_b_exit Exit
+  label=$(dm_ly_status_row label)
+  pad=$(dm_ly_status_row pad)
+  for range in 'range=window|' 'range=user|menu' 'range=user|exit'; do
+    [[ $label == *"$range"* && $pad == *"$range"* ]]
+  done
+  [[ $label != *'range=user|add'* ]]
+  # Same text on every line (the padding is only drawn in its background color).
+  strip='s/#\[[^]]*\]//g'
+  [ "$(sed "$strip" <<<"$label" | sed 's/colour#{@dm_color}//')" = "$(sed "$strip" <<<"$pad")" ]
+  run "$real" -S "$sock" set-option -g 'status-format[1]' "$label"
+  [ -z "$output" ]
+  shown=$("$real" -S "$sock" display-message -p -t t: "$label")
+  "$real" -S "$sock" kill-server
+  # No client is attached, so the bar renders as on a phone: the symbols.
+  [[ $shown == *"lap"* && $shown == *"✕"* ]]
+}
+
+@test "the workspace is built at the size of the terminal dm runs in" {
+  stty() { echo "40 90"; }
+  dm_ly_screen_size
+  [ "$DM_LY_ROWS" = 40 ] && [ "$DM_LY_COLS" = 90 ]
+  stty() { return 1; }
+  dm_ly_screen_size
+  [ "$DM_LY_ROWS" = 45 ] && [ "$DM_LY_COLS" = 160 ]
 }
 
 @test "dm inside the workspace itself opens nothing" {

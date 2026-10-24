@@ -268,7 +268,7 @@ dm_ly_layout() {
 
 dm_ly_layout_apply() {
   local wid side main narrow=0
-  dm_ly_is_narrow && narrow=1
+  dm_ly_is_narrow '=devmesh:' && narrow=1
   for wid in $(tmux list-windows -F '#{window_id}'); do
     side=$(dm_ly_pane "$wid" side)
     main=$(dm_ly_pane "$wid" main)
@@ -327,11 +327,38 @@ dm_ly_dispatch() {
 # Buttons, keys and hooks. Values come from this script (paths) or from tmux formats.
 dm_ly_tm() { tmux -L "$DM_WS_SOCKET" "$@"; }
 
+# dm_ly_status_row label|pad: one line of the status bar (machine tabs left, buttons right).
+# The bar is three lines tall so every tab and button is a comfortable touch target: the
+# middle line has the labels, the others repeat them in the color of their own background,
+# which keeps each box exactly as wide as its label on every line.
+dm_ly_status_row() {
+  local narrow='#{e|<:#{client_width},70}' bg_in='#1a1a1a' bg_cur='#2c2c2c' bg_btn='#262626'
+  local ink_in='#9a9a9a' ink_cur='#ffffff' ink_btn='#e1e1e1' ink_brand='#e1e1e1'
+  local icon_in='#{?@dm_self,⌂ ,#{?@dm_offline,○ ,}}'
+  local icon_cur='#{?@dm_self,#[fg=#7aa2f7]⌂ ,#{?@dm_offline,#[fg=#6c6c6c]○ ,#[fg=colour#{@dm_color}]● }}'
+  if [[ $1 == pad ]]; then
+    ink_in=$bg_in ink_cur=$bg_cur ink_btn=$bg_btn ink_brand='#0f0f0f'
+    icon_cur='#{?@dm_self,⌂ ,#{?@dm_offline,○ ,● }}'
+  fi
+  local pad="#{?$narrow,  ,   }" name="#{?$narrow,#{=6:window_name},#W}"
+  local tab_in="#[range=window|#{window_index}]#[bg=$bg_in]#[fg=$ink_in]$pad$icon_in$name$pad#[norange]#[default] "
+  local tab_cur="#[range=window|#{window_index}]#[bg=$bg_cur]#[fg=$ink_cur]#[bold]$pad$icon_cur#[fg=$ink_cur]$name$pad#[nobold]#[norange]#[default] "
+  local btn="#[bg=$bg_btn]#[fg=$ink_btn]"
+  # Phones get symbols (Termux has no emoji font), wider screens the word.
+  local right_narrow="#[range=user|menu]$btn   ☰   #[norange]#[default] #[range=user|exit]$btn   ✕   #[norange]#[default] "
+  local right_wide="#[range=user|exit]$btn    #{@dm_b_exit}    #[norange]#[default] "
+  printf '%s' "#[align=left] #{?$narrow,,#[fg=$ink_brand]#[bold]devmesh  #[nobold]}#{W:$tab_in,$tab_cur}#[align=right]#{?$narrow,$right_narrow,$right_wide}"
+}
+
 dm_ly_bind() {
   local base="'$BASH' '$DM_SELF' _ws"
   # Button labels in the user's language (the status bar reads them as options).
   dm_ly_tm set-option -g @dm_b_exit "$M_LY_BTN_EXIT"
   dm_ly_tm set-option -g @dm_b_list "$M_LY_BTN_LIST"
+  dm_ly_tm set-option -g status 3
+  dm_ly_tm set-option -g 'status-format[0]' "$(dm_ly_status_row pad)"
+  dm_ly_tm set-option -g 'status-format[1]' "$(dm_ly_status_row label)"
+  dm_ly_tm set-option -g 'status-format[2]' "$(dm_ly_status_row pad)"
   dm_ly_tm bind-key -n MouseDown1Status if-shell -F '#{==:#{mouse_status_range},window}' \
     'select-window -t=' "run-shell \"$base click '#{mouse_status_range}' '#{window_id}'\""
   dm_ly_tm bind-key + run-shell "$base click add '#{window_id}'"
@@ -349,7 +376,7 @@ dm_ly_build_window() {
   right="'$BASH' '$DM_SELF' _ws idle loading"
   if ((first)); then
     wid=$(tmux -L "$DM_WS_SOCKET" -f "$share/tmux/workspace.conf" new-session -d -P -F '#{window_id}' \
-      -s devmesh -n "$m" -x 160 -y 45 "$right") || return 1
+      -s devmesh -n "$m" -x "$DM_LY_COLS" -y "$DM_LY_ROWS" "$right") || return 1
   else
     wid=$(dm_ly_tm new-window -d -P -F '#{window_id}' -t =devmesh: -n "$m" "$right")
   fi
@@ -365,6 +392,18 @@ dm_ly_build_window() {
   dm_ly_tm set-option -p -t "$side" @dm_role side
 }
 
+# dm_ly_screen_size: DM_LY_COLS / DM_LY_ROWS of the terminal dm runs in (160x45 when
+# unknown), so the workspace is built at the size it will be shown.
+dm_ly_screen_size() {
+  local size
+  size=$(stty size 2>/dev/null </dev/tty) || size=
+  if [[ $size =~ ^([0-9]{1,4})\ ([0-9]{1,4})$ ]] && ((BASH_REMATCH[1] > 0 && BASH_REMATCH[2] > 0)); then
+    DM_LY_ROWS=${BASH_REMATCH[1]} DM_LY_COLS=${BASH_REMATCH[2]}
+  else
+    DM_LY_ROWS=45 DM_LY_COLS=160
+  fi
+}
+
 # dm_ly_start: re-attach the workspace, or build it: a window per machine.
 dm_ly_start() {
   local bin m first=1
@@ -378,6 +417,7 @@ dm_ly_start() {
     dm_ly_tm kill-server 2>/dev/null || true
   fi
   if ! dm_ly_tm has-session -t =devmesh 2>/dev/null; then
+    dm_ly_screen_size
     for m in $(dm_workspace_hosts); do
       [[ $m =~ $DM_LY_HOST_RE ]] || continue
       dm_ly_build_window "$m" "$first" "$bin" || return 1
@@ -387,6 +427,11 @@ dm_ly_start() {
     dm_ly_tm source-file "$(dm_share_dir)/tmux/layout.conf"
     dm_ly_bind
     dm_ly_tm set-option -t devmesh @dm_layout "$stamp"
+    # Laid out for this screen before it is shown: no visible jump on the first frame.
+    (
+      TMUX="$(dm_ly_tm display-message -p '#{socket_path}'),0,0" && export TMUX
+      dm_ly_layout_apply
+    )
   fi
   # -u: UTF-8 always. Over ssh the locale variables do not arrive, and without UTF-8 tmux
   # draws every accent and symbol as "_".
