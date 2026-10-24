@@ -42,6 +42,18 @@ dm_ws_in_tmux() {
   exec tmux detach-client -E "'$BASH' '$DM_SELF'"
 }
 
+# The join line leaves the dm-tui binary out (several MB) and "dm update" brings it: a device
+# just enrolled fetches it once here, so every device shows the same layout from the start.
+dm_ws_get_tui() {
+  local mark
+  mark="$DM_CACHE/tui-fetched-$(dm_version)"
+  [[ ${DM_UI:-layout} == layout && ${DM_TUI:-1} != 0 && ! -e $mark ]] || return 0
+  dm_tui_bin >/dev/null && return 0
+  touch "$mark"
+  dm_info "$M_LY_GET_TUI"
+  dm_update || true
+}
+
 # dm (no args): start or re-attach the workspace with the panel as its first tab.
 dm_ws_start() {
   if dm_ws_available; then
@@ -54,6 +66,7 @@ dm_ws_start() {
   fi
   # The VS Code like layout is the default; DM_UI=cards keeps the card panel, DM_UI=fzf the fzf one.
   [[ ${DM_UI:-layout} == fzf ]] && export DM_TUI=0
+  dm_ws_get_tui
   if dm_ly_ready; then
     dm_ly_start || dm_die "could not start the workspace"
   fi
@@ -91,7 +104,9 @@ dm_ws_tab() {
   dm_valid_session "$session" || dm_die "invalid session name"
   while true; do
     rc=0
-    dm_tty "$host" "dm _attach $session $spec $DM_NAME $win" || rc=$?
+    # A subshell: an unreachable machine (dm_die) is a dropped link to retry, not the end
+    # of the pane.
+    (dm_tty "$host" "dm _attach $session $spec $DM_NAME $win") || rc=$?
     if ((rc == 0)); then
       tmux select-window -t :=panel 2>/dev/null || true
       return 0
