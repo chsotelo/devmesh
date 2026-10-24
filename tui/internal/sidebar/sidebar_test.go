@@ -97,6 +97,8 @@ func run(m *Model, cmd tea.Cmd) {
 		}
 	case doneMsg:
 		m.Update(msg)
+	case pollMsg:
+		run(m, m.applyPoll(msg))
 	}
 }
 
@@ -326,5 +328,55 @@ func TestButtonsAreTallBoxesThatFillTheListWidthWithTheLabelCentered(t *testing.
 	}
 	if lines[buttonHeight] != "" {
 		t.Fatalf("an empty line must separate the buttons from the list: %q", lines[buttonHeight])
+	}
+}
+
+// fakeMemory is a remembered reading and a count of saves.
+type fakeMemory struct {
+	saved Saved
+	has   bool
+	saves int
+}
+
+func (f *fakeMemory) Load(string) (Saved, bool) { return f.saved, f.has }
+
+func (f *fakeMemory) Save(_ string, saved Saved) {
+	f.saved, f.has = saved, true
+	f.saves++
+}
+
+func TestARememberedListDrawsAtOnceAndPutsItsTerminalOnScreenBeforeReading(t *testing.T) {
+	src := &fakeSource{snap: machine(feed.ReachOnline, term("api", "1", ""), term("web", "2", "")), shown: "web"}
+	mem := &fakeMemory{has: true, saved: Saved{Rows: []Row{{Session: "api", Window: "1"}, {Session: "web", Window: "2"}}, Online: true, Shown: "web"}}
+	m := New(Options{Host: "lap", Source: src, Catalog: i18n.Fallback(), Memory: mem})
+	m.width, m.height = testWidth, 10
+
+	view := m.View()
+	if strings.Contains(view, "Loading") || !strings.Contains(view, ">_ web") {
+		t.Fatalf("view before any reading = %q", view)
+	}
+	if m.cursor != 1 {
+		t.Fatalf("cursor = %d, want the remembered terminal", m.cursor)
+	}
+	run(m, m.Init())
+
+	if got := strings.Join(src.calls, ";"); got != "show lap web 2" {
+		t.Fatalf("calls = %q", got)
+	}
+}
+
+func TestTheReadingIsRememberedOnlyWhenItChanges(t *testing.T) {
+	src := &fakeSource{snap: machine(feed.ReachOnline, term("api", "1", "")), shown: "api"}
+	mem := &fakeMemory{}
+	m := New(Options{Host: "lap", Source: src, Catalog: i18n.Fallback(), Memory: mem})
+	m.width, m.height = testWidth, 10
+
+	poll(m, src)
+	poll(m, src)
+	src.snap = machine(feed.ReachOnline, term("api", "1", ""), term("new", "1", ""))
+	poll(m, src)
+
+	if mem.saves != 2 || len(mem.saved.Rows) != 2 || mem.saved.Shown != "api" {
+		t.Fatalf("saves = %d, saved = %+v", mem.saves, mem.saved)
 	}
 }

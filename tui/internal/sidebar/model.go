@@ -5,6 +5,7 @@ package sidebar
 
 import (
 	"context"
+	"reflect"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -32,11 +33,27 @@ type Source interface {
 	Act(ctx context.Context, host, action string) error
 }
 
+// Memory keeps the last reading of a machine between runs, so a new list draws it at once
+// instead of a loading message (nil: no memory).
+type Memory interface {
+	Load(host string) (Saved, bool)
+	Save(host string, saved Saved)
+}
+
+// Saved is what the list remembers of a machine.
+type Saved struct {
+	Rows   []Row
+	Color  int
+	Online bool
+	Shown  string
+}
+
 // Options are what the sidebar needs from the outside.
 type Options struct {
 	Host    string
 	Source  Source
 	Catalog i18n.Catalog
+	Memory  Memory
 }
 
 // Row is one terminal of the machine.
@@ -52,6 +69,8 @@ type Model struct {
 	host string
 	src  Source
 	cat  i18n.Catalog
+	mem  Memory
+	kept Saved
 
 	width  int
 	height int
@@ -79,35 +98,78 @@ type pollMsg struct {
 
 type doneMsg struct{ err error }
 
-// New returns the model of the list of a machine.
+// New returns the model of the list of a machine, with its last reading when there is one.
 func New(opts Options) *Model {
-	return &Model{
+	m := &Model{
 		host:   opts.Host,
 		src:    opts.Source,
 		cat:    opts.Catalog,
+		mem:    opts.Memory,
 		width:  defaultWidth,
 		height: defaultHeight,
 	}
+	if m.mem == nil {
+		return m
+	}
+	if saved, ok := m.mem.Load(m.host); ok {
+		m.kept = saved
+		m.rows, m.color, m.online, m.shown = saved.Rows, saved.Color, saved.Online, saved.Shown
+		m.cursor = max(indexOf(m.rows, m.shown), 0)
+		m.loaded = true
+	}
+	return m
 }
 
-// Init reads the machine right away.
+// Init reads the machine right away. With a remembered terminal it first puts that one on
+// screen (the reading over the network can take seconds); the reading then corrects it.
 func (m *Model) Init() tea.Cmd {
 	m.polling = true
+	if at := indexOf(m.rows, m.shown); m.online && at >= 0 {
+		return m.showThenPollCmd(m.rows[at])
+	}
 	return m.pollCmd()
+}
+
+// showThenPollCmd shows a terminal, then reads the machine. A failed show needs no report:
+// the reading finds nothing on screen and decide() picks a terminal.
+func (m *Model) showThenPollCmd(row Row) tea.Cmd {
+	host, src := m.host, m.src
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), actionBudget)
+		_ = src.Show(ctx, source.PaneTarget{Host: host, Session: row.Session, Window: row.Window})
+		cancel()
+		return readMachine(src, host)
+	}
+}
+
+// remember stores the reading when it changed.
+func (m *Model) remember() tea.Cmd {
+	saved := Saved{Rows: m.rows, Color: m.color, Online: m.online, Shown: m.shown}
+	if m.mem == nil || reflect.DeepEqual(saved, m.kept) {
+		return nil
+	}
+	m.kept = saved
+	mem, host := m.mem, m.host
+	return func() tea.Msg {
+		mem.Save(host, saved)
+		return nil
+	}
 }
 
 func (m *Model) pollCmd() tea.Cmd {
 	host, src := m.host, m.src
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), pollBudget)
-		defer cancel()
-		snap, err := src.FeedHost(ctx, host)
-		if err != nil {
-			return pollMsg{err: err}
-		}
-		shown, err := src.Shown(ctx, host)
-		return pollMsg{snap: snap, shown: shown, err: err}
+	return func() tea.Msg { return readMachine(src, host) }
+}
+
+func readMachine(src Source, host string) pollMsg {
+	ctx, cancel := context.WithTimeout(context.Background(), pollBudget)
+	defer cancel()
+	snap, err := src.FeedHost(ctx, host)
+	if err != nil {
+		return pollMsg{err: err}
 	}
+	shown, err := src.Shown(ctx, host)
+	return pollMsg{snap: snap, shown: shown, err: err}
 }
 
 func (m *Model) showCmd(row Row, focus bool) tea.Cmd {

@@ -67,7 +67,8 @@ func (m *Model) applyPoll(msg pollMsg) tea.Cmd {
 	m.loaded = true
 	m.cursor = min(m.cursor, max(len(m.rows)-1, 0))
 	m.keepVisible()
-	return tea.Batch(next, m.decide())
+	decided := m.decide()
+	return tea.Batch(next, decided, m.remember())
 }
 
 func (m *Model) selectedSession() string {
