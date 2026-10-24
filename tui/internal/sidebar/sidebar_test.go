@@ -214,6 +214,22 @@ func TestOfflineAndEmptyMachinesShowAMessageAndHoldThePane(t *testing.T) {
 	}
 }
 
+func TestBackOnlineTheTerminalShownBeforeComesBack(t *testing.T) {
+	src := &fakeSource{snap: machine(feed.ReachOnline, term("main", "1", ""), term("api", "1", "")), shown: "api"}
+	m := loaded(t, src)
+	poll(m, src)
+
+	src.snap = machine(feed.ReachOffline)
+	poll(m, src)
+	src.snap = machine(feed.ReachOnline, term("main", "1", ""), term("api", "1", ""))
+	src.shown = ""
+	poll(m, src)
+
+	if got := strings.Join(src.calls, ";"); got != "hold lap offline;show lap api 1" {
+		t.Fatalf("calls = %q", got)
+	}
+}
+
 func TestAShownTerminalThatVanishedIsReplacedAfterTwoPolls(t *testing.T) {
 	src := &fakeSource{snap: machine(feed.ReachOnline, term("main", "1", "")), shown: "gone"}
 	m := loaded(t, src)

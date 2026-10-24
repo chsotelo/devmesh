@@ -79,7 +79,8 @@ func (m *Model) selectedSession() string {
 }
 
 // decide keeps the right pane coherent with the machine: a message when it is off or has
-// no terminals, else the first terminal when nothing is shown (or the shown one is gone).
+// no terminals, else the first terminal when nothing is shown (or the shown one is gone);
+// back online, the terminal it was showing before.
 func (m *Model) decide() tea.Cmd {
 	switch {
 	case !m.online:
@@ -99,8 +100,13 @@ func (m *Model) decide() tea.Cmd {
 		}
 	}
 	m.misses = 0
-	m.shown = m.rows[0].Session
-	return m.showCmd(m.rows[0], false)
+	next := m.rows[0]
+	if at := indexOf(m.rows, m.resume); at >= 0 {
+		next = m.rows[at]
+	}
+	m.resume = ""
+	m.shown = next.Session
+	return m.showCmd(next, false)
 }
 
 func (m *Model) hold(kind string) tea.Cmd {
@@ -109,6 +115,9 @@ func (m *Model) hold(kind string) tea.Cmd {
 		return nil
 	}
 	m.held = kind
+	if m.shown != "" {
+		m.resume = m.shown
+	}
 	m.shown = ""
 	return m.holdCmd(kind)
 }

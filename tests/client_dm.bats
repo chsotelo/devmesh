@@ -301,6 +301,10 @@ setup() {
   run dm_ws_tab lap main - - <<<"q"
   [ "$status" -eq 0 ]
   [[ $output == *"Conexión con lap perdida"* ]]
+  dm_tty() { dm_die "lap is unreachable"; }
+  run dm_ws_tab lap main - - <<<"q"
+  [ "$status" -eq 0 ]
+  [[ $output == *"Conexión con lap perdida"* ]]
 }
 
 @test "this device is reached locally: dm_run and dm_tty never ssh to themselves" {

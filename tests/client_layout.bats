@@ -14,7 +14,8 @@ setup() {
     case $1 in
       -V) echo "tmux ${STUB_TMUX_VERSION:-3.4}" ;;
       list-windows) printf '@1 lap\n@2 pc2\n' ;;
-      list-panes) printf '%%1 side\n%%2 main\n' ;;
+      list-panes) printf "${STUB_PANES-%%1 side\n%%2 main\n}" ;;
+      split-window) echo %3 ;;
       display-message)
         case $* in
           *'#{@dm_host}'*) echo lap ;;
@@ -99,6 +100,31 @@ setup() {
     [ "$status" -ne 0 ]
     ! grep -q respawn-pane "$STUB_LOG"
   done
+}
+
+@test "show: a terminal pane that ended is made again next to the list" {
+  STUB_PANES='%%1 side\n' dm_ly_show lap api 2
+  grep -q "^tmux split-window -d -h -t %1 -P -F #{pane_id} .*_ws idle loading" "$STUB_LOG"
+  grep -q '^tmux set-option -p -t %3 @dm_role main$' "$STUB_LOG"
+  grep -q "^tmux respawn-pane -k -t %3 .*_ws run 'lap' 'api' '2'\$" "$STUB_LOG"
+}
+
+@test "sync: a machine added after the workspace was built gets its tab" {
+  dm_refresh() { echo refresh >>"$STUB_LOG"; }
+  dm_tui_bin() { echo /bin/dm-tui; }
+  dm_workspace_hosts() { printf 'mac\nlap\nnew-pc\nBad\n'; }
+  dm_ly_build_window() { echo "build $*" >>"$STUB_LOG"; }
+  dm_ly_layout_apply() { echo apply >>"$STUB_LOG"; }
+  tmux() { printf 'mac\nlap\n'; }
+  dm_ly_sync
+  [ "$(grep -c '^build' "$STUB_LOG")" -eq 1 ]
+  grep -q '^build new-pc 0 /bin/dm-tui$' "$STUB_LOG"
+  grep -q '^apply$' "$STUB_LOG"
+  [ ! -e "$DM_CACHE/sync.lock" ]
+  : >"$STUB_LOG"
+  dm_workspace_hosts() { printf 'mac\nlap\n'; }
+  dm_ly_sync
+  ! grep -q -e '^build' -e '^apply' "$STUB_LOG"
 }
 
 @test "hold: offline marks the machine tab and replaces the terminal by a message" {
