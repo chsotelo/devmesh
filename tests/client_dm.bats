@@ -270,6 +270,21 @@ setup() {
   ssh_reply pc2 _G $'hostname 10.73.0.3\n'
   dm_tty pc2 "dm _attach main - tablet"
   grep -q '^mosh pc2' "$STUB_LOG"
+  ! grep -q '^ssh -t' "$STUB_LOG"
+}
+
+@test "a mosh that fails right away opens the same terminal over ssh" {
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  printf '#!/bin/sh
+echo "mosh $*" >>"$STUB_LOG"
+exit 1
+' >"$BATS_TEST_TMPDIR/bin/mosh"
+  chmod +x "$BATS_TEST_TMPDIR/bin/mosh"
+  PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+  ssh_reply pc2 _G $'hostname 10.73.0.3\n'
+  dm_tty pc2 "dm _attach main - tablet"
+  grep -q '^mosh pc2' "$STUB_LOG"
+  grep -q '^ssh -t .* pc2 dm _attach main - tablet' "$STUB_LOG"
 }
 
 @test "workspace: opening a terminal focuses its tab, or creates it with the machine color" {

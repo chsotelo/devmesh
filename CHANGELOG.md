@@ -7,6 +7,13 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.14] - 2026-10-24
+
+### Fixed
+
+- A mosh connection that fails right away (seen from the tablet after a machine woke from
+  sleep) no longer loops on "reconnecting": the same terminal opens over plain ssh.
+
 ## [0.9.13] - 2026-10-24
 
 ### Fixed
