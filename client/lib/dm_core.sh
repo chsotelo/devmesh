@@ -287,6 +287,8 @@ dm_run() {
 }
 
 # dm_tty HOST REMOTE_CMD — interactive session: mosh on path A when available, else ssh -t.
+readonly DM_MOSH_FAST_FAIL=5
+
 dm_tty() {
   local host=$1 cmd=$2 alias words
   if dm_is_self "$host"; then
@@ -298,10 +300,13 @@ dm_tty() {
   # mosh needs a direct UDP path: never through the hub (ProxyJump: macOS machines, path B).
   if [[ $alias == "$host" && ${DM_USE_MOSH:-1} == 1 ]] && command -v mosh >/dev/null &&
     ! ssh -G "$alias" 2>/dev/null | grep -q '^proxyjump '; then
-    mosh "$alias" -- sh -c "$cmd"
-  else
-    ssh -t -o ConnectTimeout=6 "$alias" "$cmd"
+    local start=$SECONDS rc=0
+    mosh "$alias" -- sh -c "$cmd" || rc=$?
+    # A mosh that fails right away (client error, UDP blocked on this network) is not a
+    # dropped link: the same terminal is opened over plain ssh instead of retrying mosh.
+    ((rc != 0 && SECONDS - start < DM_MOSH_FAST_FAIL)) || return "$rc"
   fi
+  ssh -t -o ConnectTimeout=6 "$alias" "$cmd"
 }
 
 # --- Formatting ------------------------------------------------------------------
