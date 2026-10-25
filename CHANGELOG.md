@@ -7,6 +7,18 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.15] - 2026-10-25
+
+### Added
+
+- Automatic updates, in signed mode only: every device installs a newer client bundle as
+  long as an approver signed it. Linux machines check every 30 minutes as root
+  (`devmesh-update.timer`, `devmesh-node update`, verified against the root-owned
+  `/etc/devmesh/allowed_signers`); Macs and phones check when `dm` opens (at most every
+  10 minutes, `DM_AUTO_UPDATE=0` turns it off) and start again on the new version.
+- The hub serves the signed bundle on the machines' tunnel channel (`dist-version`, `dist`,
+  `dist-sig`); an unsigned bundle is never served there.
+
 ## [0.9.14] - 2026-10-24
 
 ### Fixed

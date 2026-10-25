@@ -369,6 +369,92 @@ node_env() {
   ! grep -q 'keys2' "$STUB_LOG"
 }
 
+# --- machine: devmesh-node update (unattended, signed bundles only) ----------------------------
+# node_dist VERSION [KEYFILE]: a client bundle on the tunnel channel, signed with KEYFILE.
+node_dist() {
+  local d=$BATS_TEST_TMPDIR/ndist r="$STUB_SSH_DIR/tunnel@hub.example.test" key=${2:-$HOME/.ssh/id_devmesh}
+  rm -rf "$d"
+  mkdir -p "$d/src"
+  cp -R "$REPO/client" "$d/src/client"
+  rm -f "$d/src/client/bin/dm-tui-"*
+  printf '%s\n' "$1" >"$d/src/VERSION"
+  tar -C "$d/src" -czf "$d/dist.tgz" client VERSION
+  cp "$d/dist.tgz" "$r/dist"
+  tr_sign "$key" "$(tr_msg bundle "$1" "$(tr_sha256 "$d/dist.tgz")")" >"$r/dist-sig"
+  printf '%s\n' "$1" >"$r/dist-version"
+}
+
+node_update_env() {
+  node_env "$@"
+  export BS_ETC="$NODE_ETC" BS_PREFIX="$BATS_TEST_TMPDIR/prefix" BS_SYSTEMD="$BATS_TEST_TMPDIR/systemd" BS_WG_DIR="$BATS_TEST_TMPDIR/wg"
+}
+
+@test "node update: a newer bundle signed by an approver is installed and the timer enabled" {
+  enroll_owner
+  node_update_env
+  cp "$(dm_allowed_signers)" "$NODE_ETC/allowed_signers"
+  node_dist 9.9.9
+  run bash "$REPO/client/sbin/devmesh-node" update
+  [ "$status" -eq 0 ]
+  [[ $output == *"client updated $VER -> 9.9.9"* ]]
+  [ "$(cat "$BS_PREFIX/share/devmesh/VERSION")" = 9.9.9 ]
+  [ -f "$BS_SYSTEMD/system/devmesh-update.timer" ]
+  grep -q 'systemctl enable --now devmesh-update.timer' "$STUB_LOG"
+}
+
+@test "node update: a bundle signed by another key, or changed after signing, is never installed" {
+  enroll_owner
+  node_update_env
+  cp "$(dm_allowed_signers)" "$NODE_ETC/allowed_signers"
+  ssh-keygen -q -t ed25519 -N '' -f "$K/evil"
+  node_dist 9.9.9 "$K/evil"
+  run bash "$REPO/client/sbin/devmesh-node" update
+  [ "$status" -ne 0 ]
+  [[ $output == *"not signed by an approver"* ]]
+  [ ! -e "$BS_PREFIX/share/devmesh/VERSION" ]
+  node_dist 9.9.9
+  printf 'X' >>"$STUB_SSH_DIR/tunnel@hub.example.test/dist"
+  run bash "$REPO/client/sbin/devmesh-node" update
+  [ "$status" -ne 0 ]
+  [ ! -e "$BS_PREFIX/share/devmesh/VERSION" ]
+}
+
+@test "node update: nothing is downloaded when up to date, and nothing at all in open mode" {
+  enroll_owner
+  node_update_env
+  cp "$(dm_allowed_signers)" "$NODE_ETC/allowed_signers"
+  node_dist "$VER"
+  run bash "$REPO/client/sbin/devmesh-node" update
+  [ "$status" -eq 0 ]
+  grep -q 'dist-version' "$STUB_LOG"
+  ! grep -qE ' dist$| dist-sig$' "$STUB_LOG"
+  : >"$STUB_LOG"
+  node_update_env open
+  rm -f "$NODE_ETC/allowed_signers"
+  node_dist 9.9.9
+  run bash "$REPO/client/sbin/devmesh-node" update
+  [ "$status" -eq 0 ]
+  ! grep -q 'dist' "$STUB_LOG"
+  [ ! -e "$BS_PREFIX/share/devmesh/VERSION" ]
+}
+
+@test "keys-out: the signed client bundle is served to machines, an unsigned one never" {
+  home="$DEVMESH_STATE/home/tunnel"
+  mkdir -p "$home"
+  run env HOME="$home" DEVMESH_SHARE="$DEVMESH_SHARE" SSH_ORIGINAL_COMMAND="dist-version" sh "$REPO/server/sbin/devmesh-keys-out" lap
+  [ "$status" -ne 0 ]
+  [ -z "$output" ]
+  mkdir -p "$DEVMESH_SHARE/dist"
+  printf 'tgz' >"$DEVMESH_SHARE/dist/dist.tgz"
+  printf 'sig' >"$DEVMESH_SHARE/dist/dist.sig"
+  printf '1.2.3\n' >"$DEVMESH_SHARE/VERSION"
+  for pair in dist-version:1.2.3 dist:tgz dist-sig:sig; do
+    run env HOME="$home" DEVMESH_SHARE="$DEVMESH_SHARE" SSH_ORIGINAL_COMMAND="${pair%%:*}" sh "$REPO/server/sbin/devmesh-keys-out" lap
+    [ "$status" -eq 0 ]
+    [ "$output" = "${pair#*:}" ]
+  done
+}
+
 # --- bootstrap: local allowed_signers --------------------------------------------------------
 @test "bootstrap: the owner trusts its own key; others take the delivered approvers; none stays open" {
   export DM_NAME=lap

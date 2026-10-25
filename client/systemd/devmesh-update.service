@@ -1,0 +1,8 @@
+[Unit]
+Description=devmesh: install a newer client bundle signed by an approver
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/devmesh-node update

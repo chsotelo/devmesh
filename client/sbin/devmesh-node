@@ -4,6 +4,7 @@
 #   keys-sync   pull authorized client keys from the hub (every minute)
 #   reresolve   follow the hub to a new IP after a migration (every 2 minutes)
 #   hubwatch    alert via ntfy.sh when the hub itself is down (optional)
+#   update      install a newer client bundle signed by an approver (every 30 minutes)
 #   mesh        mesh firewall: status | open <tcp|udp>/<port[-port]> | close <...> (root)
 set -euo pipefail
 
@@ -236,11 +237,48 @@ node_mesh() {
   node_mesh status
 }
 
+# node_newer A B: A is a version strictly newer than B.
+node_newer() {
+  [[ $1 =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && $1 != "$2" ]] &&
+    [[ $(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1) == "$1" ]]
+}
+
+# Unattended update: only in signed mode, and only a bundle that an approver in the local
+# allowed_signers signed (root-owned: the hub cannot change it). The hub serves the signed
+# bundle alone on this channel; without one there is nothing to do.
+node_update() {
+  local share=${NODE_SHARE:-/usr/local/share/devmesh} work remote installed version sha
+  node_is_backing_off && return 0
+  [[ $(node_trust_mode) == signed ]] || return 0
+  [[ -s $NODE_ETC/allowed_signers ]] || node_die "signed mode but no $NODE_ETC/allowed_signers (run: dm trust pin)"
+  NODE_TMP=$(mktemp -d)
+  trap 'rm -rf "${NODE_TMP:-}"' EXIT
+  work=$NODE_TMP
+  node_hub_ssh "$work/version" dist-version 2>/dev/null || return 0
+  remote=$(head -n1 "$work/version")
+  installed=$(cat "$share/VERSION" 2>/dev/null || printf '0.0.0')
+  node_newer "$remote" "$installed" || return 0
+  node_hub_ssh "$work/dist.tgz" dist || node_die "cannot download the client bundle"
+  node_hub_ssh "$work/dist.sig" dist-sig || node_die "cannot download the bundle signature"
+  # shellcheck source=/dev/null
+  source "$share/lib/trust_common.sh"
+  version=$(tar -xzOf "$work/dist.tgz" VERSION 2>/dev/null | head -n1)
+  [[ $version == "$remote" ]] || node_die "the bundle is ${version:-unreadable}, the hub announced $remote: nothing installed"
+  sha=$(tr_sha256 "$work/dist.tgz")
+  tr_verify "$NODE_ETC/allowed_signers" "$(cat "$work/dist.sig")" "$(tr_msg bundle "$version" "$sha")" >/dev/null ||
+    node_die "the client bundle $version is not signed by an approver: nothing installed"
+  tar -xzf "$work/dist.tgz" -C "$work"
+  # shellcheck disable=SC2016 # expanded by the child shell
+  DM_DIST_DIR="$work/client" DM_VERSION="$version" bash -c \
+    'source "$DM_DIST_DIR/lib/bootstrap_linux.sh" && linux_install_client && linux_enable_update'
+  echo "devmesh-node: client updated $installed -> $version"
+}
+
 node_main() {
   case ${1:-} in
-    tunnel | keys-sync | reresolve | hubwatch | mesh) node_load ;;
+    tunnel | keys-sync | reresolve | hubwatch | mesh | update) node_load ;;
     *)
-      echo "usage: devmesh-node tunnel|keys-sync|reresolve|hubwatch|mesh" >&2
+      echo "usage: devmesh-node tunnel|keys-sync|reresolve|hubwatch|mesh|update" >&2
       exit 2
       ;;
   esac
@@ -249,6 +287,7 @@ node_main() {
     keys-sync) node_keys_sync ;;
     reresolve) node_reresolve ;;
     hubwatch) node_hubwatch ;;
+    update) node_update ;;
     mesh) shift && node_mesh "$@" ;;
   esac
 }

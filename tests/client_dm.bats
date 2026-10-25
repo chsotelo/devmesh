@@ -348,3 +348,37 @@ exit 1
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
+
+@test "auto update: a Mac or phone installs a newer signed client when dm opens, then starts on it" {
+  dm_trust_active() { return 0; }
+  dm_platform() { echo macos; }
+  dm_version() { echo 0.9.13; }
+  dm_update() { echo update >>"$STUB_LOG"; }
+  printf '#!/usr/bin/env bash\necho "restarted DM_UPDATED=$DM_UPDATED"\n' >"$BATS_TEST_TMPDIR/newdm"
+  export DM_SELF="$BATS_TEST_TMPDIR/newdm"
+  ssh_reply hub-admin version $'0.9.14\n'
+  run dm_auto_update
+  [ "$status" -eq 0 ]
+  [[ $output == *"0.9.14"* && $output == *"restarted DM_UPDATED=1"* ]]
+  grep -q '^update$' "$STUB_LOG"
+}
+
+@test "auto update: nothing on Linux, in open mode, when up to date, or within the check interval" {
+  dm_platform() { echo macos; }
+  dm_version() { echo 0.9.14; }
+  dm_update() { echo update >>"$STUB_LOG"; }
+  ssh_reply hub-admin version $'0.9.14\n'
+  dm_trust_active() { return 0; }
+  run dm_auto_update
+  [ "$status" -eq 0 ]
+  ssh_reply hub-admin version $'0.9.15\n'
+  run dm_auto_update
+  [ "$status" -eq 0 ]
+  rm -f "$DM_CACHE/update-check"
+  dm_trust_active() { return 1; }
+  run dm_auto_update
+  dm_trust_active() { return 0; }
+  dm_platform() { echo linux; }
+  run dm_auto_update
+  ! grep -q '^update$' "$STUB_LOG"
+}

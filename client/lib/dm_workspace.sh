@@ -66,6 +66,7 @@ dm_ws_start() {
   fi
   # The VS Code like layout is the default; DM_UI=cards keeps the card panel, DM_UI=fzf the fzf one.
   [[ ${DM_UI:-layout} == fzf ]] && export DM_TUI=0
+  dm_auto_update
   dm_ws_get_tui
   if dm_ly_ready; then
     dm_ly_start || dm_die "could not start the workspace"
