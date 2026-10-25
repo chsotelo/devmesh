@@ -285,6 +285,11 @@ exit 1
   dm_tty pc2 "dm _attach main - tablet"
   grep -q '^mosh pc2' "$STUB_LOG"
   grep -q '^ssh -t .* pc2 dm _attach main - tablet' "$STUB_LOG"
+  # Remembered: the next terminal on that machine goes straight to ssh.
+  : >"$STUB_LOG"
+  dm_tty pc2 "dm _attach api - tablet"
+  ! grep -q '^mosh' "$STUB_LOG"
+  grep -q '^ssh -t .* pc2 dm _attach api - tablet' "$STUB_LOG"
 }
 
 @test "workspace: opening a terminal focuses its tab, or creates it with the machine color" {

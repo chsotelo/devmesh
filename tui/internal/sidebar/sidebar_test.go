@@ -230,13 +230,15 @@ func TestBackOnlineTheTerminalShownBeforeComesBack(t *testing.T) {
 	}
 }
 
-func TestAShownTerminalThatVanishedIsReplacedAfterTwoPolls(t *testing.T) {
+func TestAShownTerminalThatVanishedIsReplacedOnlyAfterAGracePeriod(t *testing.T) {
 	src := &fakeSource{snap: machine(feed.ReachOnline, term("main", "1", "")), shown: "gone"}
 	m := loaded(t, src)
 
-	poll(m, src)
+	for range missesToSwap - 1 {
+		poll(m, src)
+	}
 	if len(src.calls) != 0 {
-		t.Fatalf("a terminal that is only being created must get a grace poll: %v", src.calls)
+		t.Fatalf("a terminal that is only being created must get a grace period: %v", src.calls)
 	}
 	poll(m, src)
 
