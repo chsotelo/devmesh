@@ -7,6 +7,16 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.16] - 2026-10-25
+
+### Fixed
+
+- Creating a terminal on a phone no longer jumps to another terminal halfway: the list
+  waits about 20 seconds (was 6) for a terminal that is still connecting before it
+  shows another one, which cut the new connection.
+- A machine where mosh failed right away is reached over ssh for a day. Each failed try
+  cost a full extra ssh login when opening a terminal and left a mosh-server behind.
+
 ## [0.9.15] - 2026-10-25
 
 ### Added

@@ -16,10 +16,13 @@ import (
 )
 
 const (
-	pollEvery     = 3 * time.Second
-	pollBudget    = 40 * time.Second
-	actionBudget  = 40 * time.Second
-	missesToSwap  = 2
+	pollEvery    = 3 * time.Second
+	pollBudget   = 40 * time.Second
+	actionBudget = 40 * time.Second
+	// Polls a shown terminal may be missing before another one replaces it. A terminal
+	// just created only exists once its connection is up, which on a phone can take
+	// several polls: replacing it sooner cut that connection.
+	missesToSwap  = 6
 	defaultWidth  = 24
 	defaultHeight = 30
 )
