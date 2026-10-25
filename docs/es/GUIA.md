@@ -304,6 +304,7 @@ Con aprobadores, un hub comprometido no puede dar acceso, suplantar una máquina
 - **Quitar.** `dm rm` en un aprobador también firma una revocación: los dispositivos descartan esa llave y nunca vuelven a aceptar una aprobación vieja de ella.
 - **Instalación existente (0.7).** En el hub: `devmesh owner <dispositivo>`. En ese dispositivo: `dm trust pin` y luego `dm trust init` (pide, por dispositivo, los últimos 16 caracteres de su huella; `--i-checked-all` lo omite: peligroso). En cada máquina: `dm trust pin` (imprime los `sudo` necesarios). `dm trust pin --reset` reemplaza a los aprobadores (escribe el final de la huella del dueño, leída con `dm trust status` en el dueño). `dm trust status` muestra el modo, los aprobadores y lo pendiente.
 - En modo firmado, un dispositivo sin `allowed_signers` se niega a sincronizar, refrescar o actualizar en vez de volver al modo abierto.
+- **Actualizaciones automáticas.** Con aprobadores, cada dispositivo se actualiza solo y solo a versiones firmadas por un aprobador: las máquinas Linux cada 30 minutos (`devmesh-update.timer`, sin `sudo` ni nadie conectado), la Mac y el teléfono al abrir `dm`. Para publicar una versión, despliega el hub desde un aprobador (`make hub` firma el bundle). Sin aprobadores no se actualiza nada solo: usa `dm update`. `DM_AUTO_UPDATE=0` lo apaga en la Mac o el teléfono.
 - Límite conocido: la confianza parte de la línea de unión y de las huellas que comparas; hazlo en un dispositivo que tengas en la mano.
 
 ## 5. Si pierdes un dispositivo
@@ -339,7 +340,7 @@ ignoran con un aviso. El servicio debe escuchar en `10.73.0.1` o en `0.0.0.0`.
 
 | Tarea | Cómo |
 |---|---|
-| Actualizar `dm` en un dispositivo | `dm update` |
+| Actualizar `dm` en un dispositivo | `dm update` (con aprobadores es automático, ver abajo) |
 | Actualizar el hub | desde el repo: `make hub HOST=root@203.0.113.10 HUB_HOST=hub.example.com SSH="ssh -i ~/.ssh/id_ed25519"` |
 | Bajar el último backup del hub | `make backup-pull` (queda cifrado en `backups/`) |
 | Ver el estado del hub | en el hub, `devmesh ls` y `devmesh check` |

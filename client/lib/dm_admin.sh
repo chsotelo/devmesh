@@ -114,12 +114,35 @@ dm_update() (
     fi
     sudo tar -xzf "$rt/dist.tgz" -C "$rt"
     sudo env DM_DIST_DIR="$rt/client" DM_VERSION="$version" bash -c \
-      'source "$DM_DIST_DIR/lib/bootstrap_linux.sh" && linux_install_client && systemctl daemon-reload'
+      'source "$DM_DIST_DIR/lib/bootstrap_linux.sh" && linux_install_client && linux_enable_update'
     sudo rm -rf "$rt"
   fi
   share=$(dm_share_dir)
   dm_info "devmesh client $(cat "$share/VERSION")"
 )
+
+# dm_newer A B: A is a version strictly newer than B.
+dm_newer() {
+  [[ $1 =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && $1 != "$2" ]] &&
+    [[ $(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1) == "$1" ]]
+}
+
+# dm_auto_update ARGS...: when "dm" opens on a Mac or a phone, a newer client on the hub is
+# installed first and dm starts again on it. Only in signed mode (the bundle must verify
+# against this device's approvers); Linux machines do it themselves (devmesh-update.timer).
+# The hub is asked at most every DM_UPDATE_EVERY minutes, and a slow hub never blocks dm.
+dm_auto_update() {
+  local stamp="$DM_CACHE/update-check" remote
+  [[ ${DM_AUTO_UPDATE:-1} == 1 && -z ${DM_UPDATED:-} && $(dm_platform) != linux ]] || return 0
+  (dm_trust_active) >/dev/null 2>&1 || return 0
+  [[ -e $stamp && -z $(find "$stamp" -mmin "+${DM_UPDATE_EVERY:-10}" 2>/dev/null) ]] && return 0
+  touch "$stamp"
+  remote=$(ssh -o ConnectTimeout=3 -o BatchMode=yes hub-admin version 2>/dev/null | head -n1) || return 0
+  dm_newer "$remote" "$(dm_version)" || return 0
+  dm_t "$M_UPDATING" "$remote" >&2
+  dm_update >/dev/null 2>&1 || return 0
+  DM_UPDATED=1 exec "$BASH" "$DM_SELF" "$@"
+}
 
 # dm mesh: what other devices can reach on this machine through the mesh. Changing it needs
 # root, so the exact sudo command is printed instead of asking for a password here.

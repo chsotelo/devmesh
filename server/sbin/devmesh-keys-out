@@ -4,6 +4,8 @@
 # ("keys <version>") for "devmesh ls". $1 is the machine name, fixed in authorized_keys.
 #   keys  <version>   bare clients.pub (nodes with DM_TRUST=open)
 #   keys2 <version>   signed bundle (nodes with DM_TRUST=signed; they verify it themselves)
+#   dist-version | dist | dist-sig   the signed client bundle, for unattended updates
+#                     (devmesh-node update). Only a signed bundle is served on this channel.
 name=$1
 cmd=${SSH_ORIGINAL_COMMAND%% *}
 version=${SSH_ORIGINAL_COMMAND#"$cmd"}
@@ -15,7 +17,16 @@ case $version in
     mkdir -p "$HOME/versions" && printf '%s\n' "$version" >"$HOME/versions/$name"
     ;;
 esac
+dist=${DEVMESH_SHARE:-/usr/local/share/devmesh}/dist
 case $cmd in
+  dist-version | dist | dist-sig)
+    [ -r "$dist/dist.tgz" ] && [ -r "$dist/dist.sig" ] || exit 1
+    ;;
+esac
+case $cmd in
+  dist-version) exec cat "${DEVMESH_SHARE:-/usr/local/share/devmesh}/VERSION" ;;
+  dist) exec cat "$dist/dist.tgz" ;;
+  dist-sig) exec cat "$dist/dist.sig" ;;
   keys2) exec cat "${DEVMESH_BUNDLE:-/etc/devmesh/clients.bundle}" ;;
   *) exec cat "${DEVMESH_CLIENTS_PUB:-/etc/devmesh/clients.pub}" ;;
 esac

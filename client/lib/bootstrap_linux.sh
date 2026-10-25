@@ -76,6 +76,12 @@ linux_install_client() {
   linux_mesh_firewall
 }
 
+# Unattended updates (devmesh-node update): installs only bundles an approver signed.
+linux_enable_update() {
+  systemctl daemon-reload
+  systemctl enable --now devmesh-update.timer >/dev/null 2>&1 || bs_log "could not enable devmesh-update.timer"
+}
+
 # WireGuard interface name of this machine: node.conf, else the enrollment environment.
 linux_wg_iface() {
   local iface=""
@@ -200,7 +206,7 @@ linux_services() {
   bs_log "enabling WireGuard, tunnel and timers"
   systemctl daemon-reload
   systemctl enable --now "wg-quick@$DM_WG_IFACE"
-  systemctl enable --now devmesh-tunnel.service devmesh-keys.timer devmesh-reresolve.timer
+  systemctl enable --now devmesh-tunnel.service devmesh-keys.timer devmesh-reresolve.timer devmesh-update.timer
   if [[ ${DM_WATCH_TOPIC:--} != - ]]; then
     systemctl enable --now devmesh-hubwatch.timer
   fi
