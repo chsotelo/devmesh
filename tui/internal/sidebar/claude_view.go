@@ -13,13 +13,15 @@ import (
 )
 
 const (
-	wideRowWidth = 40 // from here the one-word state goes on the name line
+	minNameRoom  = 8 // narrower than this the word goes under the name
+	resetCode    = "\x1b[0m"
 	hollowDot    = "○"
 	backGlyph    = "‹ "
 	pickerArrow  = " ▾"
 	indent       = 2
 	footerMargin = 1
-	footerMinGap = 2
+	footerGap    = 2
+	headRoom     = 6
 	selectedBar  = "▌"
 	ruleGlyph    = "─"
 )
@@ -138,31 +140,12 @@ func (m *Model) sessionWord(session feed.ClaudeSession) string {
 func (m *Model) sessionItems() []citem {
 	items := []citem{}
 	for _, session := range m.sessions() {
-		item := citem{
+		items = append(items, citem{
 			id: session.ID, dot: sessionDot(session.Status), title: session.Name, word: m.sessionWord(session),
 			shown: session.Openable() && session.TmuxSession() == m.shown, dim: session.Status == feed.ClaudeIdle,
-		}
-		if session.ID == m.claude.sel {
-			item.actions = m.sessionActions(session)
-		}
-		items = append(items, item)
+		})
 	}
 	return items
-}
-
-// sessionActions are the buttons under the selected session: stop and move.
-func (m *Model) sessionActions(session feed.ClaudeSession) []cbtn {
-	buttons := []cbtn{{label: m.cat.Text(i18n.KeyClStop), act: cact{kind: actStop, arg: session.ID}}}
-	targets := m.targets()
-	switch len(targets) {
-	case 0:
-	case 1:
-		buttons = append(buttons, cbtn{label: m.cat.Format(i18n.KeyClMoveTo, targets[0].Machine.Name),
-			act: cact{kind: actMoveTo, arg: session.ID, extra: targets[0].Machine.Name}})
-	default:
-		buttons = append(buttons, cbtn{label: m.cat.Text(i18n.KeyClMoveMenu), act: cact{kind: actMoveMenu, arg: session.ID}})
-	}
-	return buttons
 }
 
 func (m *Model) historyItems() []citem {
@@ -244,7 +227,8 @@ func (m *Model) cursorIndex(items []citem) int {
 	return min(max(m.claude.cur, 0), len(items)-1)
 }
 
-// rowLines draws a list row: two lines, the second one carrying the word on narrow lists.
+// sessionRowLines draws a list row on one line: dot, name cut with an ellipsis, the word
+// right-aligned. When the word leaves too little room for the name it goes under it.
 func (m *Model) sessionRowLines(item citem, index int, selected bool) []cline {
 	bar, barStyle := space, theme.Faint()
 	switch {
@@ -265,25 +249,31 @@ func (m *Model) sessionRowLines(item citem, index int, selected bool) []cline {
 		dot = space
 	}
 	prefix := barStyle.Render(bar) + dot + space
-	room := m.width - m.textWidth(prefix) - footerMargin
-	first, second := "", ""
-	if m.width >= wideRowWidth {
-		room -= m.textWidth(item.word) + 1
-		name := nameStyle.Render(m.fit(item.title, max(room, 1)))
-		gap := max(m.width-m.textWidth(prefix)-m.textWidth(name)-m.textWidth(item.word)-footerMargin, 1)
-		first = prefix + name + strings.Repeat(space, gap) + item.word
-	} else {
-		first = prefix + nameStyle.Render(m.fit(item.title, max(room, 1)))
-		second = strings.Repeat(space, m.textWidth(prefix)) + item.word
+	room := m.width - m.textWidth(prefix) - m.textWidth(item.word) - footerMargin - 1
+	if room < minNameRoom {
+		name := nameStyle.Render(m.fit(item.title, max(m.width-m.textWidth(prefix)-footerMargin, 1)))
+		return []cline{
+			{text: m.paintRow(prefix+name, item.shown), idx: index},
+			{text: m.paintRow(strings.Repeat(space, m.textWidth(prefix))+item.word, item.shown), idx: index},
+		}
 	}
-	return []cline{
-		{text: m.paintRow(first, selected), idx: index},
-		{text: m.paintRow(second, selected), idx: index},
-	}
+	name := nameStyle.Render(m.fit(item.title, room))
+	gap := max(m.width-m.textWidth(prefix)-m.textWidth(name)-m.textWidth(item.word)-footerMargin, 1)
+	return []cline{{text: m.paintRow(prefix+name+strings.Repeat(space, gap)+item.word, item.shown), idx: index}}
 }
 
-func (m *Model) paintRow(text string, _ bool) string {
-	return text + strings.Repeat(space, max(m.width-m.textWidth(text), 0))
+// paintRow pads a row to the width; the open row also gets a background.
+func (m *Model) paintRow(text string, open bool) string {
+	text += strings.Repeat(space, max(m.width-m.textWidth(text), 0))
+	if !open {
+		return text
+	}
+	background := lipgloss.NewStyle().Background(theme.Selected().GetBackground())
+	start, _, found := strings.Cut(background.Render("x"), "x")
+	if !found || start == "" {
+		return text
+	}
+	return start + strings.ReplaceAll(text, resetCode, resetCode+start) + resetCode
 }
 
 // buttonLines lays the buttons of a selected row out under it, wrapping at the width.

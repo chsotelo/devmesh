@@ -7,6 +7,21 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-10-27
+
+### Changed
+
+- The workspace sidebar follows the approved design: one line per Claude session (name, then
+  "working" or the idle time), a head line with the machine and ⏻, and a compact footer
+  (New, Terminals, History). The open session's title, Stop and Move are buttons in the top
+  bar. With no session open, the right pane says "Choose a session on the left" instead of
+  showing a terminal; Terminals keeps the terminal view.
+
+### Fixed
+
+- On Linux, `dm _claude` stopped as soon as one Claude session was running (a false test
+  ended the RSS loop under `set -e`), so the machine looked outdated and listed no sessions.
+
 ## [0.11.1] - 2026-10-27
 
 ### Fixed
@@ -24,14 +39,14 @@ and this project uses [Semantic Versioning](https://semver.org/).
   (working / waiting / idle time). Selecting one shows it in the right pane. Read from Claude
   Code's own session registry, so no hooks are needed.
 - Stop, resume, new and move: `Stop` ends a session and frees its memory, and it stays in
-  `History ›` (searchable) to resume where it left off. `＋ New` starts `claude --name` in a
+  `History âº` (searchable) to resume where it left off. `ï¼ New` starts `claude --name` in a
   project folder. `Move to <machine>` stops a session on one machine and resumes it on
   another with the full conversation, so the other machine does the work. Moving refuses
   when the project has uncommitted changes or the other machine's checkout differs.
 - Idle Claude sessions running inside devmesh stop by themselves after 2 hours
   (`DM_CLAUDE_AUTOSTOP_MIN`, 0 disables), on Linux (user timer) and macOS (LaunchAgent).
   Sessions started elsewhere, such as a VS Code terminal, are never touched.
-- `⏻` in the sidebar: suspend, power off (Linux, with a second confirmation) and wake.
+- `â»` in the sidebar: suspend, power off (Linux, with a second confirmation) and wake.
   Only offered when the machine can be woken again from here: another online machine must
   share its trusted LAN and Wake-on-WLAN must be on. A machine never powers itself off.
   Linux nodes get a polkit rule that lets the enrolled user suspend and power off, and
@@ -125,7 +140,7 @@ and this project uses [Semantic Versioning](https://semver.org/).
 - The status bar is three lines tall: machine tabs and Exit (and the list toggle on
   phones) are large touch targets on tablet, phone and desktop alike.
 - The terminal list remembers its last reading per machine: a new workspace draws the
-  list and opens the last terminal at once instead of "Loading…" while the machine
+  list and opens the last terminal at once instead of "Loadingâ¦" while the machine
   answers. The language catalog is cached the same way.
 
 ### Fixed
@@ -182,7 +197,7 @@ and this project uses [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - After `dm update`, `dm` re-attached the workspace built by the previous version, whose
-  list was still the old program in memory (on Termux: "fork/exec …"). The workspace is now
+  list was still the old program in memory (on Termux: "fork/exec â¦"). The workspace is now
   stamped with the dm version and rebuilt when it changes.
 - The Termux extra-keys notice is shown once, not on every `dm update`.
 
@@ -190,13 +205,13 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- A tab for this device (⌂), first: its own terminals, reached locally (no ssh, no hub).
+- A tab for this device (â), first: its own terminals, reached locally (no ssh, no hub).
   On a phone it lists the local tmux sessions; on a machine it replaces the trip through
   the hub to itself.
 
 ### Fixed
 
-- Termux: the panel's list stayed on "loading…" with "fork/exec …": Go programs bypass
+- Termux: the panel's list stayed on "loadingâ¦" with "fork/exec â¦": Go programs bypass
   termux-exec, so dm's "#!/usr/bin/env bash" could not run. dm now passes its bash
   (`DM_BASH`) and the panel runs dm through it.
 - A machine check could fail under pipefail (`| grep -q` and SIGPIPE).
@@ -204,7 +219,7 @@ and this project uses [Semantic Versioning](https://semver.org/).
 ### Changed
 
 - Buttons with words in the user's language (New / Delete / Exit, Nueva / Borrar / Salir);
-  phones get symbols (☰ + − ✕) since Termux has no emoji font.
+  phones get symbols (â° + â â) since Termux has no emoji font.
 
 ## [0.9.4] - 2026-10-23
 
@@ -212,7 +227,7 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 - Terminal list closer to VS Code: the `>_` icon takes the machine color and the running
   program follows the name in gray (`api  claude`); the active machine tab is underlined;
-  the `+ 🗑 ✕ ☰` buttons are wider for touch.
+  the `+ ð â â°` buttons are wider for touch.
 
 ## [0.9.3] - 2026-10-23
 
@@ -231,7 +246,7 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 - `dm` now opens a VS Code like terminal panel on tmux (3.2+): the status bar is the machine
   selector, each machine window has the list of its terminals on the left (`dm-tui sidebar`) and
-  the real remote terminal on the right; status buttons `+` new, `delete` and `exit`, a `☰`
+  the real remote terminal on the right; status buttons `+` new, `delete` and `exit`, a `â°`
   button on phones (under 70 columns the terminal fills the screen). The card panel stays with
   `DM_UI=cards` and the fzf panel with `DM_UI=fzf`; both are also the automatic fallback without
   `dm-tui` or with tmux older than 3.2.

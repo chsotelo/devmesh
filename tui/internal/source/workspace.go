@@ -14,10 +14,12 @@ const (
 	subHold      = "hold"
 	subShown     = "shown"
 	subAct       = "act"
+	subHeader    = "header"
 	flagFocus    = "focus"
-	// HoldEmpty and HoldOffline are the messages that can replace a terminal.
+	// HoldEmpty, HoldOffline and HoldChoose are the messages that can replace a terminal.
 	HoldEmpty   = "empty"
 	HoldOffline = "offline"
+	HoldChoose  = "choose"
 	// ActAdd and ActDelete are the buttons of the list: a new terminal, delete the shown one.
 	ActAdd    = "add"
 	ActDelete = "delete"
@@ -76,9 +78,9 @@ func (d *Dm) Show(ctx context.Context, target PaneTarget) error {
 	return err
 }
 
-// Hold replaces the right pane with a message: HoldEmpty or HoldOffline.
+// Hold replaces the right pane with a message: HoldEmpty, HoldOffline or HoldChoose.
 func (d *Dm) Hold(ctx context.Context, host, kind string) error {
-	if !ValidHost(host) || (kind != HoldEmpty && kind != HoldOffline) {
+	if !ValidHost(host) || (kind != HoldEmpty && kind != HoldOffline && kind != HoldChoose) {
 		return ErrInvalidArgument
 	}
 	_, err := d.output(ctx, actionTimeout, cmdWorkspace, subHold, host, kind)
@@ -91,5 +93,26 @@ func (d *Dm) Act(ctx context.Context, host, action string) error {
 		return ErrInvalidArgument
 	}
 	_, err := d.output(ctx, actionTimeout, cmdWorkspace, subAct, action, host)
+	return err
+}
+
+// Header is what the status bar shows for the session open in the right pane: its title
+// and the labels of the stop and move buttons. The zero value clears it.
+type Header struct {
+	Title string
+	Stop  string
+	Move  string
+}
+
+// SetHeader puts a header in the status bar of the machine window.
+func (d *Dm) SetHeader(ctx context.Context, host string, header Header) error {
+	if !ValidHost(host) {
+		return ErrInvalidArgument
+	}
+	arguments := []string{cmdWorkspace, subHeader, host}
+	if header.Title != "" {
+		arguments = append(arguments, header.Title, header.Stop, header.Move)
+	}
+	_, err := d.output(ctx, actionTimeout, arguments...)
 	return err
 }

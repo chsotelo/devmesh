@@ -74,9 +74,32 @@ dm_ly_idle() {
   while true; do read -r -s -n 1 -t 3600 _ || true; done
 }
 
+# One message in the middle of the pane, drawn again when the pane is resized.
+dm_ly_draw_center() {
+  local msg=$1 size rows=24 cols=80 row col
+  size=$(stty size 2>/dev/null) || size=
+  [[ $size =~ ^([0-9]+)\ ([0-9]+)$ ]] && rows=${BASH_REMATCH[1]} cols=${BASH_REMATCH[2]}
+  row=$((rows / 2))
+  col=$(((cols - ${#msg}) / 2))
+  ((row < 1)) && row=1
+  ((col < 1)) && col=1
+  printf '\033[?25l\033[2J\033[%d;%dH\033[38;5;240m%s\033[0m' "$row" "$col" "$msg"
+}
+
+# The right pane of the Claude home while no session is open: a quiet hint, no terminal.
+dm_ly_choose_screen() {
+  trap 'dm_ly_draw_center "$M_LY_CHOOSE"' WINCH
+  dm_ly_draw_center "$M_LY_CHOOSE"
+  dm_ly_idle
+}
+
 # _ws idle KIND: a message instead of a terminal.
 dm_ly_hold_screen() {
   local msg
+  if [[ ${1:-} == choose ]]; then
+    dm_ly_choose_screen
+    return
+  fi
   case ${1:-} in
     empty) msg=$M_LY_EMPTY ;;
     offline) msg=$M_LY_OFFLINE ;;
@@ -137,17 +160,60 @@ dm_ly_show() {
   return 0
 }
 
-# _ws hold HOST empty|offline: a message in the right pane (nothing is selected).
+# The status bar line of the open Claude session lives in window options (@dm_cl_*).
+dm_ly_header_clear() {
+  local opt
+  for opt in @dm_cl_title @dm_cl_stop @dm_cl_move; do
+    tmux set-option -w -t "$1" -u "$opt"
+  done
+}
+
+# A value for a window option the status bar prints: no control characters, "#" doubled
+# (it would start a style), at most 60 characters.
+dm_ly_header_clean() {
+  local text=${1//[[:cntrl:]]/}
+  text=${text//\#/##}
+  printf '%s' "${text:0:60}"
+}
+
+# _ws header HOST [TITLE STOP MOVE]: the title of the open Claude session and its two
+# buttons in the status bar of that machine's window; no title clears them.
+dm_ly_header() {
+  local host=${1:-} wid
+  dm_ly_need_tmux
+  dm_ly_check_host "$host"
+  wid=$(dm_ly_win_of_host "$host")
+  [[ $wid =~ ^@[0-9]+$ ]] || return 0
+  if [[ -z ${2:-} ]]; then
+    dm_ly_header_clear "$wid"
+    return 0
+  fi
+  tmux set-option -w -t "$wid" -- @dm_cl_title "$(dm_ly_header_clean "$2")"
+  tmux set-option -w -t "$wid" -- @dm_cl_stop "$(dm_ly_header_clean "${3:-}")"
+  tmux set-option -w -t "$wid" -- @dm_cl_move "$(dm_ly_header_clean "${4:-}")"
+}
+
+# A status bar button of the open session reaches the list of that window as a key.
+dm_ly_header_key() {
+  local key=F8 side
+  [[ $1 == dmmove ]] && key=F9
+  side=$(dm_ly_pane "$2" side)
+  [[ $side =~ ^%[0-9]+$ ]] || return 0
+  tmux send-keys -t "$side" "$key"
+}
+
+# _ws hold HOST empty|offline|choose: a message in the right pane (nothing is selected).
 dm_ly_hold() {
   local host=${1:-} kind=${2:-} wid pane
   dm_ly_need_tmux
   dm_ly_check_host "$host"
-  [[ $kind == empty || $kind == offline ]] || dm_die "invalid kind"
+  [[ $kind == empty || $kind == offline || $kind == choose ]] || dm_die "invalid kind"
   wid=$(dm_ly_win_of_host "$host")
   [[ $wid =~ ^@[0-9]+$ ]] || dm_die "no workspace window for $host"
   pane=$(dm_ly_main_of "$wid")
   [[ $pane =~ ^%[0-9]+$ ]] || dm_die "no workspace window for $host"
   tmux set-option -w -t "$wid" -u @dm_shown
+  dm_ly_header_clear "$wid"
   if [[ $kind == offline ]]; then
     tmux set-option -w -t "$wid" @dm_offline 1
   else
@@ -255,6 +321,7 @@ dm_ly_click() {
     delete) dm_ly_delete "$wid" ;;
     exit) tmux detach-client ;;
     menu) dm_ly_toggle "$wid" ;;
+    dmstop | dmmove) dm_ly_header_key "$what" "$wid" ;;
   esac
 }
 
@@ -367,6 +434,7 @@ dm_ly_dispatch() {
     idle) dm_ly_hold_screen "$@" ;;
     show) dm_ly_show "$@" ;;
     hold) dm_ly_hold "$@" ;;
+    header) dm_ly_header "$@" ;;
     shown) dm_ly_shown "$@" ;;
     add) dm_ly_add "$@" ;;
     kill) dm_ly_kill "$@" ;;
@@ -403,7 +471,14 @@ dm_ly_status_row() {
   local btn="#[bg=$bg_btn]#[fg=$ink_btn]"
   # Phones get symbols (Termux has no emoji font), wider screens the word.
   local right_narrow="#[range=user|menu]$btn   ☰   #[norange]#[default] #[range=user|exit]$btn   ✕   #[norange]#[default] "
-  local right_wide="#[range=user|exit]$btn    #{@dm_b_exit}    #[norange]#[default] "
+  # The open Claude session: its title, then Stop and Move (or Move to a picker).
+  local ink_title='#e1e1e1' bg_stop='#3a2323' ink_stop='#ffa0a0'
+  if [[ $1 == pad ]]; then
+    ink_title='#0f0f0f' ink_stop=$bg_stop
+  fi
+  local move="#{?@dm_cl_move,#[range=user|dmmove]$btn #{@dm_cl_move} #[norange]#[default] ,}"
+  local session="#[fg=$ink_title]#[bold]#{@dm_cl_title}#[nobold]  #[range=user|dmstop]#[bg=$bg_stop]#[fg=$ink_stop] #{@dm_cl_stop} #[norange]#[default] $move"
+  local right_wide="#{?@dm_cl_title,$session   ,}#[range=user|exit]$btn    #{@dm_b_exit}    #[norange]#[default] "
   printf '%s' "#[align=left] #{?$narrow,,#[fg=$ink_brand]#[bold]devmesh  #[nobold]}#{W:$tab_in,$tab_cur}#[align=right]#{?$narrow,$right_narrow,$right_wide}"
 }
 

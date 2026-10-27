@@ -99,8 +99,11 @@ dm_claude_load_rss() {
     [[ -r /proc/$pid/status ]] || continue
     RSS_KB[$pid]=$(awk '/^VmRSS:/ {print $2}' "/proc/$pid/status" 2>/dev/null)
   done <<<"$1"
+  # "if", not "&&": a false last test would be the loop's status and stop dm under set -e.
   while read -r pid kb; do
-    [[ -n ${pid:-} && -z ${RSS_KB[$pid]:-} ]] && RSS_KB[$pid]=$kb
+    if [[ -n ${pid:-} && -z ${RSS_KB[$pid]:-} ]]; then
+      RSS_KB[$pid]=$kb
+    fi
   done < <(ps -o pid=,rss= -p "$(tr '\n' ',' <<<"$1" | sed 's/,$//')" 2>/dev/null || true)
 }
 

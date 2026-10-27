@@ -200,6 +200,73 @@ setup() {
   [ "$status" -ne 0 ]
 }
 
+@test "click: the status bar Stop and Move send F8 and F9 to the list of that window" {
+  dm_ly_click dmstop @1
+  grep -q '^tmux send-keys -t %1 F8$' "$STUB_LOG"
+  : >"$STUB_LOG"
+  dm_ly_click dmmove @1
+  grep -q '^tmux send-keys -t %1 F9$' "$STUB_LOG"
+  : >"$STUB_LOG"
+  STUB_PANES='%2 main\n' dm_ly_click dmstop @1
+  ! grep -q send-keys "$STUB_LOG"
+}
+
+@test "header: the open session title and button labels go to window options, cleaned" {
+  dm_ly_header lap '27Oct - #tools' Stop 'Move to desk'
+  grep -q '^tmux set-option -w -t @1 -- @dm_cl_title 27Oct - ##tools$' "$STUB_LOG"
+  grep -q '^tmux set-option -w -t @1 -- @dm_cl_stop Stop$' "$STUB_LOG"
+  grep -q '^tmux set-option -w -t @1 -- @dm_cl_move Move to desk$' "$STUB_LOG"
+  : >"$STUB_LOG"
+  dm_ly_header lap $'a\x1b[31mb' Stop ''
+  grep -q '^tmux set-option -w -t @1 -- @dm_cl_title a\[31mb$' "$STUB_LOG"
+  : >"$STUB_LOG"
+  dm_ly_header lap
+  grep -q '^tmux set-option -w -t @1 -u @dm_cl_title$' "$STUB_LOG"
+  grep -q '^tmux set-option -w -t @1 -u @dm_cl_stop$' "$STUB_LOG"
+  grep -q '^tmux set-option -w -t @1 -u @dm_cl_move$' "$STUB_LOG"
+  run dm_ly_header 'x;y' a b c
+  [ "$status" -ne 0 ]
+}
+
+@test "hold choose: the right pane gets the placeholder and the header is cleared" {
+  dm_ly_hold lap choose
+  grep -q "^tmux respawn-pane -k -t %2 .*_ws idle 'choose'" "$STUB_LOG"
+  grep -q '^tmux set-option -w -t @1 -u @dm_cl_title$' "$STUB_LOG"
+  grep -q '^tmux set-option -w -t @1 -u @dm_shown$' "$STUB_LOG"
+  ! grep -q '@dm_offline 1' "$STUB_LOG"
+}
+
+@test "the choose screen prints the message centered, nothing else" {
+  stty() { echo "20 40"; }
+  out=$(dm_ly_draw_center 'Choose a session on the left')
+  [[ $out == *$'\033[10;6H'*"Choose a session on the left"* ]]
+}
+
+@test "the status bar shows the open session title with Stop and Move ranges on every line" {
+  label=$(dm_ly_status_row label)
+  pad=$(dm_ly_status_row pad)
+  for row in "$label" "$pad"; do
+    [[ $row == *'range=user|dmstop'* && $row == *'range=user|dmmove'* && $row == *'@dm_cl_title'* ]]
+  done
+}
+
+@test "the status bar renders the open session header only while the window has one" {
+  real=$(PATH=${PATH#"$REPO/tests/stubs:"} type -P tmux) || skip "no real tmux"
+  sock="$BATS_TEST_TMPDIR/tmux.sock"
+  "$real" -S "$sock" -f /dev/null new-session -d -s t -n lap -x 200 -y 20
+  "$real" -S "$sock" set-option -g @dm_b_exit Exit
+  label=$(dm_ly_status_row label)
+  label=${label//'#{e|<:#{client_width},70}'/0} # no client is attached: draw the wide bar
+  without=$("$real" -S "$sock" display-message -p -t t: "$label")
+  "$real" -S "$sock" set-option -w -t t: @dm_cl_title "27Oct - tools"
+  "$real" -S "$sock" set-option -w -t t: @dm_cl_stop Detener
+  "$real" -S "$sock" set-option -w -t t: @dm_cl_move "Mover a desk"
+  with=$("$real" -S "$sock" display-message -p -t t: "$label")
+  "$real" -S "$sock" kill-server
+  [[ $without != *"27Oct"* ]]
+  [[ $with == *"27Oct - tools"* && $with == *"Detener"* && $with == *"Mover a desk"* ]]
+}
+
 @test "wide screens resize the list only when it lost its width (each resize redraws)" {
   STUB_WIDTH=$DM_LY_SIDE_COLS
   dm_ly_zoomed() { return 1; }

@@ -16,6 +16,7 @@ var english = map[string]string{
 	"M_CL_GHOST_NAME":         "session name · then pick a project",
 	"M_CL_HISTORY":            "History (%s) ›",
 	"M_CL_HISTORY_EMPTY":      "no stopped sessions",
+	"M_CL_HISTORY_SHORT":      "History ›",
 	"M_CL_LOAD":               "load %s MB",
 	"M_CL_MOVE_MENU":          "Move to ▾",
 	"M_CL_MOVE_TO":            "Move to %s",

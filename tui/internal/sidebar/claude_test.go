@@ -140,40 +140,66 @@ func TestHomeListsClaudeSessionsWorkingFirstThenIdleByIdleTime(t *testing.T) {
 	fits(t, m)
 }
 
-func TestNarrowRowsEllipsizeTheNameAndPutTheWordOnTheSecondLine(t *testing.T) {
-	m, _ := claudeModel(t, 24, 30)
+func TestEachSessionIsOneLineWithTheNameCutAndTheWordRightAligned(t *testing.T) {
+	m, _ := claudeModel(t, 32, 30)
 	m.claude.machine.Claude[3].Name = "27Oct - a very long session name"
 
 	lines := strings.Split(m.View(), "\n")
 
-	if !strings.Contains(lines[0], "27Oct - a very") || !strings.Contains(lines[1], "working") {
-		t.Fatalf("first row:\n%s", m.View())
+	first, second := lines[1], lines[2]
+	if !strings.Contains(first, "27Oct - a very") || !strings.Contains(first, "…") || !strings.HasSuffix(strings.TrimRight(first, " "), "working") {
+		t.Fatalf("working row = %q\n%s", first, m.View())
 	}
-	if !strings.Contains(m.View(), "…") {
-		t.Fatalf("long names must be cut with an ellipsis at 24 columns:\n%s", m.View())
+	if !strings.Contains(second, "19Oct - mytools") || !strings.HasSuffix(strings.TrimRight(second, " "), "20 min") {
+		t.Fatalf("idle row = %q\n%s", second, m.View())
+	}
+	if !strings.HasPrefix(first, "▌●") || !strings.HasPrefix(second, " ○") {
+		t.Fatalf("a working row is a filled dot, an idle one a hollow dot: %q %q", first, second)
 	}
 	fits(t, m)
 }
 
-func TestStaleLineAndFooterStackOnANarrowListAndSitSideBySideWhenWide(t *testing.T) {
+func TestTheOpenSessionIsMarkedAndTheCursorRowStaysVisible(t *testing.T) {
+	m, _ := claudeModel(t, 32, 30)
+	send(m, "down") // the cursor leaves the open session (shown = main = the working one)
+
+	lines := strings.Split(m.View(), "\n")
+
+	if !strings.HasPrefix(lines[1], "▎") || !strings.HasPrefix(lines[2], "▌") {
+		t.Fatalf("open row bar and cursor bar:\n%s", m.View())
+	}
+}
+
+func TestHeadHasTheMachineAndAClickablePowerGlyph(t *testing.T) {
+	m, src := claudeModel(t, 32, 30)
+
+	if !strings.Contains(strings.Split(m.View(), "\n")[0], "lap") {
+		t.Fatalf("head:\n%s", m.View())
+	}
+	tapText(t, m, powerGlyph)
+
+	if m.claude.mode != modePower || len(src.calls) == 0 {
+		t.Fatalf("mode=%v calls=%v", m.claude.mode, src.calls)
+	}
+}
+
+func TestFooterSitsOnOneLineWhenItFitsAndWrapsWhenItDoesNot(t *testing.T) {
+	wide, _ := claudeModel(t, 32, 30)
+	together := false
+	for _, line := range strings.Split(wide.View(), "\n") {
+		together = together || (strings.Contains(line, "＋ New") && strings.Contains(line, "Terminals ›") && strings.Contains(line, "History ›"))
+	}
+	if !together || !strings.Contains(wide.View(), "Stop all 2") {
+		t.Fatalf("footer at 32:\n%s", wide.View())
+	}
+	fits(t, wide)
 	narrow, _ := claudeModel(t, 24, 30)
-	view := narrow.View()
-	for _, want := range []string{"Stop all 2", "＋ New", "Terminals ›", "History (2) ›"} {
-		if !strings.Contains(view, want) {
-			t.Errorf("narrow lacks %q:\n%s", want, view)
+	for _, want := range []string{"Stop all 2", "＋ New", "Terminals ›", "History ›"} {
+		if !strings.Contains(narrow.View(), want) {
+			t.Errorf("narrow lacks %q:\n%s", want, narrow.View())
 		}
 	}
 	fits(t, narrow)
-	wide, _ := claudeModel(t, 60, 30)
-	lines := strings.Split(wide.View(), "\n")
-	together := false
-	for _, line := range lines {
-		together = together || (strings.Contains(line, "＋ New") && strings.Contains(line, "Terminals ›") && strings.Contains(line, "History (2) ›"))
-	}
-	if !together || !strings.Contains(wide.View(), "2 idle for over 1 h · Stop all 2") {
-		t.Fatalf("wide footer:\n%s", wide.View())
-	}
-	fits(t, wide)
 }
 
 func TestTappingASessionShowsItInTheRightPaneAndFocusesIt(t *testing.T) {
@@ -198,38 +224,110 @@ func TestASessionOutsideTmuxCannotBeShownButCanBeStopped(t *testing.T) {
 	if len(src.calls) != 0 || !strings.Contains(m.View(), "open outside devmesh") {
 		t.Fatalf("calls=%v view:\n%s", src.calls, m.View())
 	}
-	tapText(t, m, "[Stop]")
+	send(m, "x")
 	if got := strings.Join(src.calls, ";"); got != "stop lap "+idOutside {
 		t.Fatalf("calls = %q", got)
 	}
 }
 
-func TestTheSelectedRowShowsStopAndMoveButtonsUnderIt(t *testing.T) {
-	m, src := claudeModel(t, 44, 30, other("desk", feed.ReachOnline, true, 10))
+func TestRowsHaveNoInlineButtons(t *testing.T) {
+	m, _ := claudeModel(t, 44, 30, other("desk", feed.ReachOnline, true, 10))
 
-	view := m.View()
-	lines := strings.Split(view, "\n")
-	if !strings.Contains(lines[2], "[Stop]") || !strings.Contains(lines[2], "[Move to desk]") {
-		t.Fatalf("buttons under the first row:\n%s", view)
+	if view := m.View(); strings.Contains(view, "[Stop]") || strings.Contains(view, "[Move to") {
+		t.Fatalf("the actions live in the status bar header:\n%s", view)
 	}
+}
 
-	tapText(t, m, "[Move to desk]")
+func TestHeaderTellsTheStatusBarAboutTheOpenSessionAndClearsWhenNoneIsOpen(t *testing.T) {
+	m, src := claudeModel(t, 32, 30, other("desk", feed.ReachOnline, true, 10))
+
+	run(m, m.syncHeader()) // the model built by claudeModel has not run Update since the poll
+	if got := strings.Join(src.headers, ";"); got != "lap|27Oct - tools|Stop|Move to desk" {
+		t.Fatalf("headers = %q", got)
+	}
+	src.shown, src.snap.Machines[0].Claude = "", src.snap.Machines[0].Claude[:3] // the open one is stopped
+	poll(m, src)
+	run(m, m.syncHeader())
+
+	if got := src.headers[len(src.headers)-1]; got != "lap|||" {
+		t.Fatalf("headers = %q", src.headers)
+	}
+}
+
+func TestHeaderOffersAPickerWhenSeveralMachinesCanReceive(t *testing.T) {
+	m, src := claudeModel(t, 32, 30, other("a", feed.ReachOnline, true, 10), other("b", feed.ReachOnline, true, 20))
+
+	run(m, m.syncHeader())
+
+	if got := strings.Join(src.headers, ";"); got != "lap|27Oct - tools|Stop|Move to ▾" {
+		t.Fatalf("headers = %q", got)
+	}
+}
+
+func TestStatusBarStopActsOnTheOpenSessionNotOnTheCursorRow(t *testing.T) {
+	m, src := claudeModel(t, 32, 30)
+	send(m, "down", "down") // the cursor is on another session
+
+	send(m, keyHeaderStop)
+
+	if got := strings.Join(src.calls, ";"); got != "stop lap "+idWorking {
+		t.Fatalf("calls = %q (the open session is the working one on main)", got)
+	}
+}
+
+func TestStatusBarMoveGoesStraightToTheOnlyTargetAndActsOnTheOpenSession(t *testing.T) {
+	m, src := claudeModel(t, 32, 30, other("desk", feed.ReachOnline, true, 10))
+	send(m, "down")
+
+	send(m, keyHeaderMove)
 
 	if got := strings.Join(src.calls, ";"); got != "move lap "+idWorking+" desk;show desk fresh " {
 		t.Fatalf("calls = %q", got)
 	}
-	if !strings.Contains(m.View(), "now running on desk") {
-		t.Fatalf("the sidebar must say where it went:\n%s", m.View())
+}
+
+func TestStatusBarMoveOpensThePickerWhenThereIsMoreThanOneTarget(t *testing.T) {
+	m, src := claudeModel(t, 32, 30, other("a", feed.ReachOnline, true, 10), other("b", feed.ReachOnline, true, 20))
+	send(m, "down")
+
+	send(m, keyHeaderMove)
+
+	if m.claude.mode != modeTargets || m.claude.pending.id != idWorking || len(src.calls) != 0 {
+		t.Fatalf("mode=%v pending=%+v calls=%v", m.claude.mode, m.claude.pending, src.calls)
 	}
 }
 
-func TestButtonsWrapOnANarrowList(t *testing.T) {
-	m, _ := claudeModel(t, 24, 30, other("workstation", feed.ReachOnline, true, 10))
+func TestStatusBarKeysDoNothingWithoutAnOpenSession(t *testing.T) {
+	m, src := claudeModel(t, 32, 30, other("desk", feed.ReachOnline, true, 10))
+	src.shown = ""
+	m.shown = ""
 
-	lines := strings.Split(m.View(), "\n")
+	send(m, keyHeaderStop, keyHeaderMove)
 
-	if !strings.Contains(lines[2], "[Stop]") || !strings.Contains(lines[3], "[Move to workstation]") {
-		t.Fatalf("buttons must wrap:\n%s", m.View())
+	if len(src.calls) != 0 || m.claude.mode != modeClaude {
+		t.Fatalf("mode=%v calls=%v", m.claude.mode, src.calls)
+	}
+}
+
+func TestKeyboardStopAndMoveStillActOnTheSelectedRow(t *testing.T) {
+	m, src := claudeModel(t, 32, 30, other("desk", feed.ReachOnline, true, 10))
+	send(m, "down")
+
+	send(m, "m")
+
+	if got := strings.Join(src.calls, ";"); got != "move lap "+idIdle+" desk;show desk fresh " {
+		t.Fatalf("calls = %q", got)
+	}
+}
+
+func TestALongStatusWordMovesUnderTheNameOnATinyList(t *testing.T) {
+	m, _ := claudeModel(t, 20, 30)
+	m.claude.machine.Claude[3].Status = feed.ClaudeWaiting
+
+	view := m.View()
+
+	if !strings.Contains(view, "waiting for you") {
+		t.Fatalf("view:\n%s", view)
 	}
 	fits(t, m)
 }
@@ -239,7 +337,7 @@ func TestMoveListMarksTheBestMachineAndRefusesTheOnesThatCannotReceive(t *testin
 		other("big", feed.ReachOnline, true, 900), other("small", feed.ReachOnline, true, 100),
 		other("off", feed.ReachOffline, true, 0), other("bare", feed.ReachOnline, false, 0))
 
-	tapText(t, m, "[Move to ▾]")
+	send(m, keyHeaderMove)
 
 	view := m.View()
 	for _, want := range []string{"move to…", "small", "★ best", "load 100 MB", "big", "off", "bare", "no Claude"} {
@@ -287,7 +385,7 @@ func TestStopAllStopsEverySessionIdleForOverAnHour(t *testing.T) {
 func TestHistoryIsSearchableAndOffersResumeHereOrElsewhere(t *testing.T) {
 	m, src := claudeModel(t, 44, 30, other("desk", feed.ReachOnline, true, 10))
 
-	tapText(t, m, "History (2) ›")
+	tapText(t, m, "History ›")
 	view := m.View()
 	for _, want := range []string{"history › lap", "18Oct - form guide", "1 h", "13Oct - document skill", "3 d"} {
 		if !strings.Contains(view, want) {
@@ -385,19 +483,73 @@ func TestTerminalsFooterShowsTheOldListAndTheBackButtonReturns(t *testing.T) {
 	}
 }
 
-func TestWithNothingShownTheKeeperTerminalIsPickedNotAClaudeSession(t *testing.T) {
+func TestOnTheClaudeHomeWithNothingOpenTheRightPaneIsThePlaceholderNotATerminal(t *testing.T) {
 	machine := claudeMachine()
-	machine.Terminals = append(machine.Terminals, term("keep", "1", ""))
-	machine.Terminals[len(machine.Terminals)-1].Session = "main2"
 	machine.Claude = machine.Claude[:3] // main no longer runs Claude
 	src := &fakeSource{snap: feed.Snapshot{Machines: []feed.Machine{machine}}, shown: ""}
 	m := New(Options{Host: "lap", Source: src, Catalog: i18n.Fallback()})
 	m.width, m.height = 44, 30
 
 	poll(m, src)
+	poll(m, src)
+
+	if got := strings.Join(src.calls, ";"); got != "hold lap choose" {
+		t.Fatalf("calls = %q (one placeholder, no terminal)", got)
+	}
+}
+
+func TestAClaudeSessionStoppedWhileShownGivesWayToThePlaceholder(t *testing.T) {
+	m, src := claudeModel(t, 44, 30)
+	src.snap.Machines[0].Claude = src.snap.Machines[0].Claude[:3]
+
+	poll(m, src)
+
+	if got := strings.Join(src.calls, ";"); got != "hold lap choose" || m.shown != "" {
+		t.Fatalf("calls = %q shown = %q", got, m.shown)
+	}
+}
+
+func TestATerminalLeftOverFromTheTerminalsScreenIsReplacedWhenBackOnTheHome(t *testing.T) {
+	m, src := claudeModel(t, 44, 30)
+	src.snap.Machines[0].Claude = src.snap.Machines[0].Claude[:3]
+	src.shown = "main"
+	tapText(t, m, "Terminals ›")
+	poll(m, src)
+	src.calls = nil
+
+	tapAt(m, m.buttons()[0].from, 1) // ‹ back
+
+	if got := strings.Join(src.calls, ";"); got != "hold lap choose" {
+		t.Fatalf("calls = %q", got)
+	}
+}
+
+func TestEnteringTheTerminalsScreenWithNothingOpenShowsTheMainTerminal(t *testing.T) {
+	machine := claudeMachine()
+	machine.Claude = machine.Claude[:3]
+	src := &fakeSource{snap: feed.Snapshot{Machines: []feed.Machine{machine}}, shown: ""}
+	m := New(Options{Host: "lap", Source: src, Catalog: i18n.Fallback()})
+	m.width, m.height = 44, 30
+	poll(m, src)
+	src.calls = nil
+
+	tapText(t, m, "Terminals ›")
 
 	if got := strings.Join(src.calls, ";"); got != "show lap main 2" {
-		t.Fatalf("calls = %q (the main keeper)", got)
+		t.Fatalf("calls = %q", got)
+	}
+}
+
+func TestAPollRacingAFreshlyShownSessionDoesNotReplaceIt(t *testing.T) {
+	m, src := claudeModel(t, 44, 30)
+	src.shown = ""
+	tapText(t, m, "19Oct - mytools")
+	src.calls = nil
+
+	poll(m, src) // reads tmux before the show landed
+
+	if len(src.calls) != 0 || m.shown != "s2" {
+		t.Fatalf("calls=%v shown=%q", src.calls, m.shown)
 	}
 }
 
@@ -450,5 +602,17 @@ func TestAutoPickNeverShowsAClaudeSession(t *testing.T) {
 		if strings.HasPrefix(call, "show ") {
 			t.Fatalf("auto-pick showed a Claude session: %q", call)
 		}
+	}
+}
+
+func TestChoosingASessionPutsItsTitleInTheStatusBar(t *testing.T) {
+	m, src := claudeModel(t, 32, 30)
+	src.shown = ""
+	m.shown = ""
+
+	tapText(t, m, "19Oct - mytools")
+
+	if len(src.headers) == 0 || src.headers[len(src.headers)-1] != "lap|19Oct - mytools|Stop|" {
+		t.Fatalf("headers = %q", src.headers)
 	}
 }
