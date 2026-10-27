@@ -41,6 +41,7 @@ type Pane interface {
 	Show(ctx context.Context, target source.PaneTarget) error
 	Hold(ctx context.Context, host, kind string) error
 	Act(ctx context.Context, host, action string) error
+	SetHeader(ctx context.Context, host string, header source.Header) error
 }
 
 // Source is what the sidebar needs from dm. The Claude actions run "dm _cstop",
@@ -109,6 +110,10 @@ type Model struct {
 
 	claude claudeState
 	power  powerState
+
+	header source.Header // what the status bar was last told about the open session
+	expect string        // the session just shown by an action
+	grace  int           // polls that may still report another one while it connects
 }
 
 type tickMsg struct{}

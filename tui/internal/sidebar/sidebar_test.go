@@ -28,6 +28,8 @@ type fakeSource struct {
 	snap  feed.Snapshot
 	shown string
 	calls []string
+	// headers are the lines the status bar was told, apart from calls.
+	headers []string
 	// mesh is the whole mesh, projects the folders and session what the Claude actions
 	// that start a session answer with.
 	mesh     feed.Snapshot
@@ -54,6 +56,13 @@ func (f *fakeSource) Hold(_ context.Context, host, kind string) error {
 
 func (f *fakeSource) Act(_ context.Context, host, action string) error {
 	f.record("act " + host + " " + action)
+	return nil
+}
+
+func (f *fakeSource) SetHeader(_ context.Context, host string, header source.Header) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.headers = append(f.headers, host+"|"+header.Title+"|"+header.Stop+"|"+header.Move)
 	return nil
 }
 
@@ -144,7 +153,8 @@ func run(m *Model, cmd tea.Cmd) {
 			}
 		}
 	case doneMsg:
-		m.Update(msg)
+		_, follow := m.Update(msg)
+		run(m, follow)
 	case pollMsg:
 		run(m, m.applyPoll(msg))
 	case claudeDoneMsg, meshMsg, projectsMsg, powerCheckMsg, powerDoneMsg:
@@ -443,6 +453,7 @@ func TestTheReadingIsRememberedOnlyWhenItChanges(t *testing.T) {
 	mem := &fakeMemory{}
 	m := New(Options{Host: "lap", Source: src, Catalog: i18n.Fallback(), Memory: mem})
 	m.width, m.height = testWidth, 10
+	m.claude.mode = modeTerminals
 
 	poll(m, src)
 	poll(m, src)

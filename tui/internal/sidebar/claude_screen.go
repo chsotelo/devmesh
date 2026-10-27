@@ -48,7 +48,7 @@ func (m *Model) claudeScreen() screen {
 	case modePower:
 		scr = m.listScreen(m.powerHead())
 	default:
-		scr = m.listScreen(nil)
+		scr = m.listScreen([]cline{m.homeHead()})
 		scr.foot = m.homeFoot()
 	}
 	if len(scr.body) == 0 {
@@ -98,42 +98,56 @@ func (m *Model) homeFoot() []cline {
 		foot = append(foot, line)
 	}
 	foot = append(foot, plain(theme.Faint().Render(strings.Repeat(ruleGlyph, m.width))))
+	return append(foot, m.footerLines()...)
+}
+
+// homeHead is the machine and, at the right, the power button.
+func (m *Model) homeHead() cline {
+	left := space + theme.MachineDot(m.color, m.online) + space + theme.Bold().Render(m.fit(m.host, m.width-headRoom))
+	right := theme.Dim().Render(powerGlyph)
+	gap := max(m.width-m.textWidth(left)-m.textWidth(right)-footerMargin, 1)
+	line := cline{text: left + strings.Repeat(space, gap) + right, idx: -1}
+	from := m.textWidth(left) + gap - 1
+	line.segs = []cseg{{from: from, to: m.width, act: cact{kind: actPower}}}
+	return line
+}
+
+// footerLines lay new, terminals and history out side by side, going on to a second line
+// only when they do not fit the width.
+func (m *Model) footerLines() []cline {
 	labels := []string{
 		m.cat.Text(i18n.KeyClNew),
 		m.cat.Text(i18n.KeyClTerminals),
-		m.cat.Format(i18n.KeyClHistory, strconv.Itoa(len(m.claude.machine.History))),
-		powerGlyph,
+		m.cat.Text(i18n.KeyClHistoryShort),
 	}
-	acts := []cact{{kind: actNew}, {kind: actTerminals}, {kind: actHistory}, {kind: actPower}}
-	used := 2 * footerMargin
-	for _, label := range labels {
-		used += m.textWidth(label)
-	}
-	if used+footerMinGap*(len(labels)-1) > m.width {
-		for i, label := range labels {
-			line := plain(space + theme.Dim().Render(m.fit(label, m.width-2)))
-			line.act = acts[i]
-			foot = append(foot, line)
+	acts := []cact{{kind: actNew}, {kind: actTerminals}, {kind: actHistory}}
+	lines := []cline{}
+	line, text, x := cline{idx: -1}, "", 0
+	flush := func() {
+		if text != "" {
+			line.text = text
+			lines = append(lines, line)
 		}
-		return foot
+		line, text, x = cline{idx: -1}, "", 0
 	}
-	gap := (m.width - used) / (len(labels) - 1)
-	line, x := cline{idx: -1}, 0
-	var text strings.Builder
-	text.WriteString(strings.Repeat(space, footerMargin))
-	x = footerMargin
 	for i, label := range labels {
-		line.segs = append(line.segs, cseg{from: max(x-gap/2, 0), to: x + m.textWidth(label) + gap/2, act: acts[i]})
-		text.WriteString(theme.Dim().Render(label))
-		x += m.textWidth(label)
-		if i < len(labels)-1 {
-			text.WriteString(strings.Repeat(space, gap))
-			x += gap
+		label = m.fit(label, m.width-2*footerMargin)
+		width := m.textWidth(label)
+		if text != "" && x+footerGap+width > m.width-footerMargin {
+			flush()
 		}
+		if text == "" {
+			text, x = strings.Repeat(space, footerMargin), footerMargin
+		} else {
+			text += strings.Repeat(space, footerGap)
+			x += footerGap
+		}
+		line.segs = append(line.segs, cseg{from: x - footerGap/2, to: x + width + footerGap/2, act: acts[i]})
+		text += theme.Dim().Render(label)
+		x += width
 	}
-	line.segs[len(line.segs)-1].to = m.width
-	line.text = text.String()
-	return append(foot, line)
+	flush()
+	return lines
 }
 
 // claudeView draws the screen: head, the scrolled body, and the foot at the bottom.

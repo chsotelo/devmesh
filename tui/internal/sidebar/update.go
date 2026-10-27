@@ -9,8 +9,14 @@ import (
 
 const wheelStep = 1
 
-// Update handles keys, mouse and the poll results.
+// Update handles keys, mouse and the poll results, then tells the status bar about the
+// session that is open.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.update(msg)
+	return next, tea.Batch(cmd, m.syncHeader())
+}
+
+func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -70,6 +76,14 @@ func (m *Model) applyPoll(msg pollMsg) tea.Cmd {
 	m.rows = rowsOf(machine)
 	m.color = machine.Color
 	m.shown = msg.shown
+	if m.grace > 0 {
+		if msg.shown == m.expect {
+			m.grace = 0
+		} else {
+			m.grace--
+			m.shown = m.expect // the session just shown may not be reported yet
+		}
+	}
 	if !m.loaded {
 		m.cursor = max(indexOf(m.rows, m.shown), 0)
 	} else if at := indexOf(m.rows, selected); at >= 0 {
@@ -104,6 +118,8 @@ func (m *Model) decide() tea.Cmd {
 	switch {
 	case !m.online:
 		return m.hold(source.HoldOffline)
+	case m.claude.mode != modeTerminals:
+		return m.decideClaude()
 	case len(m.rows) == 0:
 		return m.hold(source.HoldEmpty)
 	}
@@ -137,7 +153,7 @@ func (m *Model) hold(kind string) tea.Cmd {
 		return nil
 	}
 	m.held = kind
-	if m.shown != "" {
+	if m.shown != "" && kind != source.HoldChoose {
 		m.resume = m.shown
 	}
 	m.shown = ""

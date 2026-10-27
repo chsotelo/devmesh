@@ -82,6 +82,13 @@ transcript() {
   [ "$name" = '19Oct - redi "general"' ]
 }
 
+@test "_claude: the real dm (set -e) lists a live session; on Linux its RSS comes from /proc" {
+  live_session "$SID1" busy "redi:@3.%7" "$DM_PROJECTS_DIR/redi" 'x'
+  run "$REPO/client/bin/dm" _claude
+  [ "$status" -eq 0 ]
+  [[ ${lines[1]} == "L${t}${SID1}${t}"* ]]
+}
+
 @test "_claude: no tmux, bad values and control characters are cleaned" {
   live_session "$SID1" 'bad status' 'x;rm -rf' /srv/app $'a\\tb\\u0007c'
   run dm_claude

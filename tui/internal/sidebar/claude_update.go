@@ -9,6 +9,9 @@ import (
 
 // handleKey routes a key to the terminal list or to the Claude screens.
 func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
+	if cmd, handled := m.headerKey(msg.String()); handled {
+		return cmd
+	}
 	if m.claude.mode == modeTerminals {
 		return m.handleTerminalKey(msg)
 	}

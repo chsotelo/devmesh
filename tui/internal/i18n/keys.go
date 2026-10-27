@@ -104,6 +104,7 @@ const (
 	KeyClNew           = "M_CL_NEW"
 	KeyClTerminals     = "M_CL_TERMINALS"
 	KeyClHistory       = "M_CL_HISTORY"
+	KeyClHistoryShort  = "M_CL_HISTORY_SHORT"
 	KeyClStop          = "M_CL_STOP"
 	KeyClMoveTo        = "M_CL_MOVE_TO"
 	KeyClMoveMenu      = "M_CL_MOVE_MENU"

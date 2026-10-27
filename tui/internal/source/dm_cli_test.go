@@ -217,6 +217,27 @@ func TestWorkspaceCommandsPassValidatedPlainArguments(t *testing.T) {
 	if args := strings.Join(recordedArguments(t, argLog), " "); args != "_ws hold lap offline" {
 		t.Fatalf("args = %q", args)
 	}
+	if err := dm.Hold(context.Background(), "lap", HoldChoose); err != nil {
+		t.Fatalf("Hold choose: %v", err)
+	}
+	if args := strings.Join(recordedArguments(t, argLog), " "); args != "_ws hold lap choose" {
+		t.Fatalf("args = %q", args)
+	}
+	if err := dm.SetHeader(context.Background(), "lap", Header{Title: "27Oct - tools", Stop: "Stop", Move: "Move to desk"}); err != nil {
+		t.Fatalf("Header: %v", err)
+	}
+	if args := recordedArguments(t, argLog); strings.Join(args, "|") != "_ws|header|lap|27Oct - tools|Stop|Move to desk" {
+		t.Fatalf("args = %q", args)
+	}
+	if err := dm.SetHeader(context.Background(), "lap", Header{}); err != nil {
+		t.Fatalf("Header clear: %v", err)
+	}
+	if args := strings.Join(recordedArguments(t, argLog), " "); args != "_ws header lap" {
+		t.Fatalf("args = %q", args)
+	}
+	if err := dm.SetHeader(context.Background(), "L A", Header{Title: "x", Stop: "y", Move: "z"}); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("Header host: %v", err)
+	}
 	session, err := dm.Shown(context.Background(), "lap")
 	if err != nil || session != "api" {
 		t.Fatalf("Shown = %q, %v", session, err)

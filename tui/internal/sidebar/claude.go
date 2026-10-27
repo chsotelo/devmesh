@@ -214,6 +214,7 @@ func (m *Model) reason(why feed.Why) string {
 // goMode changes what the list shows and starts at its first row.
 func (m *Model) goMode(next mode) tea.Cmd {
 	m.power = powerState{}
+	m.misses = 0
 	m.claude.mode, m.claude.cur, m.claude.top, m.claude.note = next, 0, 0, ""
 	m.claude.input.SetValue("")
 	m.claude.input.Blur()
@@ -226,6 +227,12 @@ func (m *Model) goMode(next mode) tea.Cmd {
 		m.claude.input.CursorEnd()
 		if !m.claude.projectsOK {
 			return m.projectsCmd()
+		}
+	case modeTerminals, modeClaude:
+		// The right pane follows the screen: a terminal on the terminals screen, the
+		// message (or the open session) on the Claude home.
+		if m.polled() {
+			return m.decide()
 		}
 	}
 	return nil
@@ -287,7 +294,7 @@ func (m *Model) applyClaudeDone(msg claudeDoneMsg) tea.Cmd {
 		m.claude.note = m.cat.Format(i18n.KeyClNowOn, msg.to)
 	}
 	if msg.open != "" && msg.to == m.host {
-		m.shown = msg.open
+		m.shown, m.expect, m.grace = msg.open, msg.open, showGrace
 	}
 	m.claude.mode, m.claude.cur, m.claude.top = modeClaude, 0, 0
 	m.claude.input.Blur()
@@ -350,14 +357,22 @@ func (m *Model) openTargets(id string, resume bool) tea.Cmd {
 	return m.goMode(modeTargets)
 }
 
-// moveSelected is "Mover a": straight to the only other machine, else the list.
+// moveSelected is "Mover a" on the row under the cursor.
 func (m *Model) moveSelected() tea.Cmd {
 	session, found := m.selectedClaude()
-	targets := m.targets()
-	switch {
-	case !found || len(targets) == 0:
+	if !found {
 		return nil
-	case len(targets) == 1:
+	}
+	return m.moveSession(session)
+}
+
+// moveSession moves a session: straight to the only other machine, else the list.
+func (m *Model) moveSession(session feed.ClaudeSession) tea.Cmd {
+	targets := m.targets()
+	switch len(targets) {
+	case 0:
+		return nil
+	case 1:
 		return m.moveTo(session.ID, targets[0].Machine.Name)
 	}
 	return m.openTargets(session.ID, false)
@@ -371,5 +386,6 @@ func (m *Model) chooseSession(session feed.ClaudeSession) tea.Cmd {
 		return nil
 	}
 	m.shown, m.held, m.misses = session.TmuxSession(), "", 0
+	m.expect, m.grace = m.shown, showGrace
 	return m.showCmd(Row{Session: session.TmuxSession(), Window: m.windowOf(session)}, true)
 }
