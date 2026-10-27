@@ -1,0 +1,7 @@
+[Unit]
+Description=devmesh: follow the network for direct LAN access (path L)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/devmesh-node lan apply

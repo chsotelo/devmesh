@@ -114,7 +114,7 @@ dm_update() (
     fi
     sudo tar -xzf "$rt/dist.tgz" -C "$rt"
     sudo env DM_DIST_DIR="$rt/client" DM_VERSION="$version" bash -c \
-      'source "$DM_DIST_DIR/lib/bootstrap_linux.sh" && linux_install_client && linux_enable_update'
+      'source "$DM_DIST_DIR/lib/bootstrap_linux.sh" && linux_install_client && linux_sshd_refresh && linux_enable_update'
     sudo rm -rf "$rt"
   fi
   share=$(dm_share_dir)
@@ -159,6 +159,15 @@ dm_mesh() {
   printf '  sudo devmesh-node mesh open <tcp|udp>/<port>     e.g. tcp/8000 or tcp/8000-8010\n'
   printf '  sudo devmesh-node mesh close <tcp|udp>/<port>\n'
   printf 'For web servers and databases prefer "dm port": it goes inside SSH and opens nothing.\n'
+  printf '\nDirect on a trusted LAN (ssh/mosh without the hub):\n'
+  # shellcheck disable=SC2086 # the list is space-separated
+  for entry in ${DM_LAN_TRUST:-}; do
+    printf '  %s (router %s)\n' "${entry%@*}" "${entry#*@}"
+  done
+  [[ -n ${DM_LAN_TRUST:-} ]] || printf '  no LAN trusted yet\n'
+  printf '  sudo devmesh-node lan trust      trust the network this machine is on now (e.g. home)\n'
+  printf '  sudo devmesh-node lan forget     stop trusting every LAN\n'
+  printf '  devmesh-node lan status          is it direct right now?\n'
 }
 
 dm_version() { cat "$(dm_share_dir)/VERSION" 2>/dev/null || printf 'dev\n'; }

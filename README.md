@@ -21,7 +21,9 @@ is a small server you own.
   └──────────────┘      via the hub             └─────────┘     opened by each machine
 ```
 
-- **Path A, WireGuard:** devices reach machines directly over the private network.
+- **Path L, same LAN:** on a network the machine trusts (`sudo devmesh-node lan trust`),
+  devices on it connect straight to the machine, without the hub.
+- **Path A, WireGuard:** devices reach machines over the private network, through the hub.
 - **Path B, reverse SSH:** each machine keeps a tunnel open to the hub. When UDP is
   blocked, `dm` goes through the hub over SSH. It tries A first and falls back to B by itself.
 - Terminals live in tmux on each machine, so they survive disconnects.

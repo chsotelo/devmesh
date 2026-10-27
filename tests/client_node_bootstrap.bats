@@ -87,13 +87,70 @@ setup() {
   [ "$(grep -c 'source x' "$BATS_TEST_TMPDIR/rc")" -eq 1 ]
 }
 
-@test "bootstrap: sshd drop-in listens on devmesh IP + localhost and resets Match" {
-  export DM_DIST_DIR="$REPO/client" DM_IP=10.73.0.9
+@test "bootstrap: sshd adds the LAN address only while on a trusted LAN" {
+  export DM_DIST_DIR="$REPO/client" DM_IP=10.73.0.9 BS_RUN=$BATS_TEST_TMPDIR/run
   # shellcheck source=/dev/null
   source "$REPO/client/lib/bootstrap_linux.sh"
   run linux_sshd_conf dev
-  [[ ${lines[1]} == "ListenAddress 10.73.0.9" ]]
-  [[ ${lines[2]} == "ListenAddress 127.0.0.1" ]]
+  [[ $output != *"ListenAddress 192.168"* ]]
+  [[ $output != *"0.0.0.0"* ]]
+  mkdir -p "$BS_RUN"
+  printf '192.168.18.26 192.168.18.0/24 wlp1s0\n' >"$BS_RUN/lan"
+  run linux_sshd_conf dev
+  [[ $output == *$'ListenAddress 10.73.0.9\nListenAddress 127.0.0.1\nListenAddress 192.168.18.26'* ]]
+  printf '010.0.0.1 x y\n' >"$BS_RUN/lan"
+  run linux_sshd_conf dev
+  [[ $output != *"010.0.0.1"* ]]
+}
+
+# refresh_env SSHD_OK — an enrolled machine's sshd drop-in (old format) and an sshd stub.
+refresh_env() {
+  export DM_DIST_DIR="$REPO/client" BS_SSHD_DIR="$BATS_TEST_TMPDIR/sshd" BS_ETC="$NODE_ETC"
+  export BS_RUN=$BATS_TEST_TMPDIR/run
+  mkdir -p "$BS_RUN"
+  printf '192.168.18.26 192.168.18.0/24 wlp1s0\n' >"$BS_RUN/lan"
+  unset DM_IP
+  printf 'DM_IP=10.73.0.9\n' >>"$NODE_ETC/node.conf"
+  mkdir -p "$BS_SSHD_DIR/sshd_config.d" "$BATS_TEST_TMPDIR/bin"
+  printf '# old\nListenAddress 10.73.0.9\nListenAddress 127.0.0.1\nMatch User dev\n    AuthorizedKeysFile x\nMatch all\n' \
+    >"$BS_SSHD_DIR/sshd_config.d/10-devmesh.conf"
+  printf '#!/bin/sh\necho "sshd $*" >>"$STUB_LOG"\nexit %s\n' "$1" >"$BATS_TEST_TMPDIR/bin/sshd"
+  printf '#!/bin/sh\n' >"$BATS_TEST_TMPDIR/bin/install"
+  chmod +x "$BATS_TEST_TMPDIR/bin/sshd" "$BATS_TEST_TMPDIR/bin/install"
+  export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+  # shellcheck source=/dev/null
+  source "$REPO/client/lib/bootstrap_linux.sh"
+}
+
+@test "update: the sshd drop-in is re-rendered for its user and sshd restarted once" {
+  refresh_env 0
+  linux_sshd_refresh
+  dropin=$BS_SSHD_DIR/sshd_config.d/10-devmesh.conf
+  grep -qxF "ListenAddress 192.168.18.26" "$dropin"
+  grep -qxF "ListenAddress 10.73.0.9" "$dropin"
+  grep -qxF "Match User dev" "$dropin"
+  [ "$(grep -c 'systemctl restart' "$STUB_LOG")" -eq 1 ]
+  linux_sshd_refresh
+  [ "$(grep -c 'systemctl restart' "$STUB_LOG")" -eq 1 ]
+}
+
+@test "update: a drop-in sshd rejects is rolled back and sshd is not restarted" {
+  refresh_env 1
+  cp "$BS_SSHD_DIR/sshd_config.d/10-devmesh.conf" "$BATS_TEST_TMPDIR/before"
+  run linux_sshd_refresh
+  [ "$status" -eq 0 ]
+  [[ $output == *"kept the previous one"* ]]
+  cmp "$BS_SSHD_DIR/sshd_config.d/10-devmesh.conf" "$BATS_TEST_TMPDIR/before"
+  ! grep -q 'systemctl restart' "$STUB_LOG"
+}
+
+@test "bootstrap: sshd drop-in listens on devmesh IP + localhost and resets Match" {
+  export DM_DIST_DIR="$REPO/client" DM_IP=10.73.0.9 BS_RUN=$BATS_TEST_TMPDIR/norun
+  # shellcheck source=/dev/null
+  source "$REPO/client/lib/bootstrap_linux.sh"
+  run linux_sshd_conf dev
+  [[ ${lines[2]} == "ListenAddress 10.73.0.9" ]]
+  [[ ${lines[3]} == "ListenAddress 127.0.0.1" ]]
   [[ $output == *"PasswordAuthentication no"* ]]
   [[ $output == *"Match User dev"* ]]
   [ "${lines[-1]}" = "Match all" ]

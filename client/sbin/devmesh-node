@@ -6,10 +6,12 @@
 #   hubwatch    alert via ntfy.sh when the hub itself is down (optional)
 #   update      install a newer client bundle signed by an approver (every 30 minutes)
 #   mesh        mesh firewall: status | open <tcp|udp>/<port[-port]> | close <...> (root)
+#   lan         direct ssh/mosh on trusted LANs: status | trust | forget | apply (root)
 set -euo pipefail
 
 NODE_ETC=${NODE_ETC:-/etc/devmesh}
 NODE_STATE=${NODE_STATE:-/var/lib/devmesh}
+NODE_RUN=${NODE_RUN:-/run/devmesh}
 
 node_die() {
   printf 'devmesh-node: %s\n' "$*" >&2
@@ -237,6 +239,142 @@ node_mesh() {
   node_mesh status
 }
 
+# --- Path L: trusted LANs ----------------------------------------------------------------
+# A trusted LAN is "<cidr>@<router MAC>" (DM_LAN_TRUST in node.conf): the subnet alone would
+# also match a cafe that uses the same range. While the machine is on one, $NODE_RUN/lan holds
+# "<its ip> <cidr> <dev>": sshd binds that address and DEVMESH-LAN accepts that subnet on that
+# interface. Anywhere else the file is empty and sshd is bound to the mesh and localhost only.
+readonly NODE_MAC_RE='^([0-9a-f]{2}:){5}[0-9a-f]{2}$'
+
+# node_gw_mac GW DEV — the router's MAC from the neighbour table (lowercase).
+node_gw_mac() {
+  ip -4 neigh show "$1" dev "$2" 2>/dev/null |
+    awk '{for (i = 1; i < NF; i++) if ($i == "lladdr") {print tolower($(i + 1)); exit}}'
+}
+
+# node_lan_current — "ip cidr dev router-mac" of the network the default route uses now.
+node_lan_current() {
+  local gw="" dev="" cidr ip mac
+  read -r gw dev < <(ip -4 route show default 2>/dev/null |
+    awk '{for (i = 1; i < NF; i++) { if ($i == "via") g = $(i + 1); if ($i == "dev") d = $(i + 1) } print g, d; exit}') || true
+  [[ -n $gw && -n $dev ]] || return 1
+  cidr=$(ip -4 -o route show dev "$dev" scope link 2>/dev/null | awk '$1 ~ /\// {print $1; exit}')
+  ip=$(ip -4 -o route get "$gw" 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p')
+  mac=$(node_gw_mac "$gw" "$dev")
+  if [[ -z $mac ]]; then
+    ping -c 1 -W 1 "$gw" >/dev/null 2>&1 || true
+    mac=$(node_gw_mac "$gw" "$dev")
+  fi
+  [[ -n $cidr && -n $ip && $mac =~ $NODE_MAC_RE ]] || return 1
+  fw_valid_lan "$cidr" || return 1
+  printf '%s %s %s %s\n' "$ip" "$cidr" "$dev" "$mac"
+}
+
+# node_lan_list — DM_LAN_TRUST from node.conf, one valid "<cidr>@<mac>" per line.
+node_lan_list() {
+  local v e
+  v=$(sed -n 's/^DM_LAN_TRUST="\(.*\)"$/\1/p' "$NODE_ETC/node.conf" 2>/dev/null)
+  for e in $v; do
+    fw_valid_lan "${e%@*}" && [[ ${e#*@} =~ $NODE_MAC_RE ]] && printf '%s\n' "$e"
+  done
+  return 0
+}
+
+# node_lan_match — "ip cidr dev" when the current network is a trusted one.
+node_lan_match() {
+  local ip cidr dev mac e
+  read -r ip cidr dev mac < <(node_lan_current) || return 1
+  while read -r e; do
+    [[ $e == "$cidr@$mac" ]] && printf '%s %s %s\n' "$ip" "$cidr" "$dev" && return 0
+  done < <(node_lan_list)
+  return 1
+}
+
+# node_lan_write LIST... — replace DM_LAN_TRUST in node.conf (the line is dropped when empty).
+node_lan_write() {
+  local conf="$NODE_ETC/node.conf" tmp
+  tmp=$(mktemp "$conf.XXXXXX")
+  grep -v '^DM_LAN_TRUST=' "$conf" >"$tmp" || true
+  (($#)) && printf 'DM_LAN_TRUST="%s"\n' "$*" >>"$tmp"
+  chmod 0644 "$tmp"
+  mv -f "$tmp" "$conf"
+}
+
+# node_sshd_refresh — re-render sshd's drop-in from the current state (restart only on change).
+node_sshd_refresh() {
+  local share=${NODE_SHARE:-/usr/local/share/devmesh}
+  [[ -r $share/lib/bootstrap_linux.sh ]] || return 0
+  (
+    export DM_DIST_DIR=$share BS_ETC=$NODE_ETC BS_RUN=$NODE_RUN
+    # shellcheck source=/dev/null
+    source "$share/lib/bootstrap_linux.sh"
+    linux_sshd_refresh
+  )
+}
+
+# node_lan_apply — follow the network (timer + after every change). Joining a trusted LAN:
+# firewall first, then sshd binds. Leaving it: sshd unbinds first, then the firewall closes.
+node_lan_apply() {
+  local fw new
+  fw=$(node_fw_script)
+  new=$(node_lan_match) || new=""
+  install -d -m 0755 "$NODE_RUN"
+  printf '%s\n' "$new" >"$NODE_RUN/lan.tmp"
+  mv -f "$NODE_RUN/lan.tmp" "$NODE_RUN/lan"
+  if [[ -n $new ]]; then
+    NODE_ETC=$NODE_ETC NODE_RUN=$NODE_RUN bash "$fw" lan
+    node_sshd_refresh
+  else
+    node_sshd_refresh
+    NODE_ETC=$NODE_ETC NODE_RUN=$NODE_RUN bash "$fw" lan
+  fi
+}
+
+# devmesh-node lan status|trust|forget|apply — the networks whose devices reach this
+# machine's ssh/mosh directly (no hub). "trust" adds the network the machine is on now.
+node_lan() {
+  local sub=${1:-status} fw cur ip cidr dev mac e kept=() n=0
+  fw=$(node_fw_script)
+  # shellcheck source=/dev/null
+  source "$fw"
+  case $sub in
+    status)
+      while read -r e; do
+        [[ -z $e ]] || printf 'trusted LAN: %s (router %s)\n' "${e%@*}" "${e#*@}"
+      done < <(node_lan_list)
+      if cur=$(node_lan_match); then
+        printf 'direct now: yes, on %s\n' "$cur"
+      else
+        printf 'direct now: no (this network is not trusted)\n'
+      fi
+      return 0
+      ;;
+    trust | forget | apply) ;;
+    *) node_die "usage: devmesh-node lan status|trust|forget|apply" ;;
+  esac
+  [[ $EUID -eq 0 || ${DEVMESH_ALLOW_NONROOT:-0} == 1 ]] || node_die "lan $sub needs root (use sudo)"
+  case $sub in
+    apply)
+      node_lan_apply
+      return 0
+      ;;
+    trust)
+      cur=$(node_lan_current) || node_die "cannot read this network (default route, subnet and router MAC)"
+      read -r ip cidr dev mac <<<"$cur"
+      while read -r e; do
+        [[ -z $e ]] || kept+=("$e")
+        [[ $e != "$cidr@$mac" ]] || n=1
+      done < <(node_lan_list)
+      ((n)) || kept+=("$cidr@$mac")
+      printf 'trusting %s on %s (router %s): devices on it reach %s directly\n' "$cidr" "$dev" "$mac" "$ip"
+      ;;
+    forget) kept=() ;;
+  esac
+  node_lan_write ${kept[@]+"${kept[@]}"}
+  node_lan_apply
+  node_lan status
+}
+
 # node_newer A B: A is a version strictly newer than B.
 node_newer() {
   [[ $1 =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && $1 != "$2" ]] &&
@@ -270,15 +408,15 @@ node_update() {
   tar -xzf "$work/dist.tgz" -C "$work"
   # shellcheck disable=SC2016 # expanded by the child shell
   DM_DIST_DIR="$work/client" DM_VERSION="$version" bash -c \
-    'source "$DM_DIST_DIR/lib/bootstrap_linux.sh" && linux_install_client && linux_enable_update'
+    'source "$DM_DIST_DIR/lib/bootstrap_linux.sh" && linux_install_client && linux_sshd_refresh && linux_enable_update'
   echo "devmesh-node: client updated $installed -> $version"
 }
 
 node_main() {
   case ${1:-} in
-    tunnel | keys-sync | reresolve | hubwatch | mesh | update) node_load ;;
+    tunnel | keys-sync | reresolve | hubwatch | mesh | lan | update) node_load ;;
     *)
-      echo "usage: devmesh-node tunnel|keys-sync|reresolve|hubwatch|mesh|update" >&2
+      echo "usage: devmesh-node tunnel|keys-sync|reresolve|hubwatch|mesh|lan|update" >&2
       exit 2
       ;;
   esac
@@ -289,6 +427,7 @@ node_main() {
     hubwatch) node_hubwatch ;;
     update) node_update ;;
     mesh) shift && node_mesh "$@" ;;
+    lan) shift && node_lan "$@" ;;
   esac
 }
 

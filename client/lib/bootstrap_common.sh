@@ -211,6 +211,8 @@ EOF
   [[ -z ${DM_HUB_PIN:-} ]] || printf 'DM_HUB_PIN=%s\n' "$DM_HUB_PIN"
   # Linux mesh firewall: extra ports opened with "devmesh-node mesh open".
   [[ -z ${DM_MESH_OPEN:-} ]] || printf 'DM_MESH_OPEN="%s"\n' "$DM_MESH_OPEN"
+  # LANs whose devices reach ssh/mosh directly, "<cidr>@<router MAC>" ("devmesh-node lan trust").
+  [[ -z ${DM_LAN_TRUST:-} ]] || printf 'DM_LAN_TRUST="%s"\n' "$DM_LAN_TRUST"
   return 0
 }
 
@@ -226,5 +228,7 @@ bs_already_enrolled() {
   # Ports the owner opened on the mesh firewall survive a re-run.
   DM_MESH_OPEN=$(sed -n 's/^DM_MESH_OPEN="\(.*\)"$/\1/p' "$conf")
   [[ $DM_MESH_OPEN =~ ^[a-z0-9/\ -]*$ ]] || DM_MESH_OPEN=""
-  export DM_PORT DM_COLOR DM_MESH_OPEN
+  DM_LAN_TRUST=$(sed -n 's/^DM_LAN_TRUST="\(.*\)"$/\1/p' "$conf")
+  [[ $DM_LAN_TRUST =~ ^[0-9a-f./@:\ ]*$ ]] || DM_LAN_TRUST=""
+  export DM_PORT DM_COLOR DM_MESH_OPEN DM_LAN_TRUST
 }

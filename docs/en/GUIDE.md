@@ -18,8 +18,10 @@ Spanish version: [../es/GUIA.md](../es/GUIA.md). Install summary: [../../README.
 | **Control** | A device you manage the machines from | Your Mac |
 | **Mobile** | An Android tablet or phone with Termux | Your tablet, your phone |
 
-Every device has two paths to the machines:
-- **Path A (WireGuard VPN):** the fastest.
+Every device has up to three paths to the machines:
+- **Path L (same local network):** direct, not through the hub. Only on the networks you
+  trusted on that machine (see "Direct on your LAN").
+- **Path A (WireGuard VPN):** through the hub.
 - **Path B (tunnel through the hub):** used only when the VPN is not available.
 
 You do not choose: `dm` uses whichever works.
@@ -301,6 +303,25 @@ devmesh-node mesh status                    # or just: dm mesh
 
 `dm mesh` needs no root: it shows what is open and prints the exact `sudo` command to change
 it. Machines enrolled before this existed get the firewall with `dm update`.
+
+### Direct on your LAN
+
+When your Mac, your tablet and a machine share a network (home, office), `dm` connects straight
+to the machine instead of going around through the hub: latency drops from the VPS's to your
+WiFi's. It is enabled per network, on each machine, while it is on that network (root needed):
+
+```bash
+sudo devmesh-node lan trust       # trust the network it is on now (subnet + router)
+sudo devmesh-node lan forget      # stop trusting every network
+devmesh-node lan status           # is it direct right now?
+```
+
+A network is recognised by its subnet **and** its router: a cafe with the same subnet has
+another router and does not count. Off your trusted networks SSH does not even listen on the
+local network (on a public WiFi nobody sees it). The host key is the same as through the hub,
+so a changed address or another machine is refused and `dm` uses the hub. Devices learn the
+address by themselves, from the machine, and ask again every 30 minutes; the machine checks
+which network it is on every minute.
 
 For web servers and databases prefer `dm port`: it travels inside SSH, so nothing is opened
 and nothing crosses the mesh in the clear. The hub cannot read your SSH sessions, but it can

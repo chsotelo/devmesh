@@ -3,12 +3,18 @@
 # Inbound traffic on the mesh interface is limited to: established connections, ping, SSH,
 # mosh (UDP 60000-61000) and the ports listed in DM_MESH_OPEN (node.conf). Everything else
 # is dropped. All rules live in the DEVMESH-IN chain; nothing else is ever touched.
+# devmesh-node-fw lan — second layer for path L (DEVMESH-LAN): outside the mesh and localhost,
+# ssh and mosh are accepted only from the trusted LAN the machine is on right now
+# ($NODE_RUN/lan, written by "devmesh-node lan apply"), on that interface; the rest is
+# dropped. The first layer is sshd itself, which is only bound to the LAN in that state.
 # Without iptables the machine is left as it was (warning, exit 0).
 set -euo pipefail
 set -f # the port list is split on spaces; never expanded as file globs
 
 NODE_ETC=${NODE_ETC:-/etc/devmesh}
+NODE_RUN=${NODE_RUN:-/run/devmesh}
 FW_CHAIN=DEVMESH-IN
+LAN_CHAIN=DEVMESH-LAN
 # One entry: tcp/<port>, udp/<port> or tcp|udp/<a>-<b>, ports 1-65535, a <= b.
 FW_ENTRY_RE='^(tcp|udp)/([1-9][0-9]{0,4})(-([1-9][0-9]{0,4}))?$'
 
@@ -65,6 +71,56 @@ fw_up() {
   iptables -C INPUT -i "$iface" -j "$FW_CHAIN" 2>/dev/null || iptables -I INPUT 1 -i "$iface" -j "$FW_CHAIN"
 }
 
+# fw_valid_lan CIDR — a private IPv4 network (10/8, 172.16/12, 192.168/16), prefix 8-32,
+# octets without leading zeros (libc would read 010 as octal).
+fw_valid_lan() {
+  local o='(0|[1-9][0-9]{0,2})'
+  [[ $1 =~ ^$o\.$o\.$o\.$o/([0-9]{1,2})$ ]] || return 1
+  local a=${BASH_REMATCH[1]} b=${BASH_REMATCH[2]} c=${BASH_REMATCH[3]} d=${BASH_REMATCH[4]} n=$((10#${BASH_REMATCH[5]}))
+  ((b <= 255 && c <= 255 && d <= 255 && n >= 8 && n <= 32)) || return 1
+  ((a == 10 || (a == 172 && b >= 16 && b <= 31 && n >= 12) || (a == 192 && b == 168 && n >= 16)))
+}
+
+# fw_lan_state — "cidr dev" of the trusted LAN the machine is on now, or nothing.
+fw_lan_state() {
+  local ip cidr dev
+  [[ -r $NODE_RUN/lan ]] || return 0
+  read -r ip cidr dev _ <"$NODE_RUN/lan" || true
+  [[ -n ${ip:-} ]] || return 0
+  fw_valid_lan "$cidr" && [[ $dev =~ ^[a-zA-Z0-9_.-]{1,15}$ ]] || fw_die "invalid $NODE_RUN/lan; firewall not changed"
+  printf '%s %s\n' "$cidr" "$dev"
+}
+
+# fw_iface — the mesh interface from node.conf (traffic on it is DEVMESH-IN's job).
+fw_iface() {
+  local iface=""
+  [[ -r $NODE_ETC/node.conf ]] && iface=$(sed -n 's/^DM_WG_IFACE=//p' "$NODE_ETC/node.conf")
+  iface=${iface:-devmesh}
+  [[ $iface =~ ^[a-z][a-z0-9]{0,14}$ ]] || fw_die "invalid DM_WG_IFACE in node.conf"
+  printf '%s\n' "$iface"
+}
+
+fw_lan() {
+  local iface state cidr="" dev=""
+  iface=$(fw_iface)
+  state=$(fw_lan_state)
+  [[ -z $state ]] || read -r cidr dev <<<"$state"
+  command -v iptables >/dev/null || {
+    echo "devmesh-node-fw: iptables not found; path L relies on sshd's bind only" >&2
+    return 0
+  }
+  iptables -n -L "$LAN_CHAIN" >/dev/null 2>&1 || iptables -N "$LAN_CHAIN"
+  iptables -F "$LAN_CHAIN"
+  iptables -A "$LAN_CHAIN" -i lo -j RETURN
+  iptables -A "$LAN_CHAIN" -i "$iface" -j RETURN
+  [[ -z $cidr ]] || iptables -A "$LAN_CHAIN" -i "$dev" -s "$cidr" -j ACCEPT
+  iptables -A "$LAN_CHAIN" -j DROP
+  iptables -C INPUT -p tcp --dport 22 -j "$LAN_CHAIN" 2>/dev/null ||
+    iptables -I INPUT 1 -p tcp --dport 22 -j "$LAN_CHAIN"
+  iptables -C INPUT -p udp --dport 60000:61000 -j "$LAN_CHAIN" 2>/dev/null ||
+    iptables -I INPUT 1 -p udp --dport 60000:61000 -j "$LAN_CHAIN"
+}
+
 fw_down() {
   local iface=$1
   command -v iptables >/dev/null || return 0
@@ -79,11 +135,15 @@ fw_down() {
 
 fw_main() {
   local action=${1:-} iface=${2:-}
-  [[ $iface =~ ^[a-z][a-z0-9]{0,14}$ ]] || fw_die "usage: devmesh-node-fw up|down <iface>"
+  if [[ $action == lan ]]; then
+    fw_lan
+    return
+  fi
+  [[ $iface =~ ^[a-z][a-z0-9]{0,14}$ ]] || fw_die "usage: devmesh-node-fw up|down <iface> | lan"
   case $action in
     up) fw_up "$iface" ;;
     down) fw_down "$iface" ;;
-    *) fw_die "usage: devmesh-node-fw up|down <iface>" ;;
+    *) fw_die "usage: devmesh-node-fw up|down <iface> | lan" ;;
   esac
 }
 

@@ -7,6 +7,28 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-26
+
+### Added
+
+- Path L, same LAN: on a network a machine trusts, devices on it connect straight to the
+  machine instead of going around through the hub (on a home WiFi, ~9 ms instead of ~50 ms
+  and more). `sudo devmesh-node lan trust` trusts the network the machine is on now, by
+  subnet and router MAC (a cafe with the same range does not match);
+  `sudo devmesh-node lan forget` undoes it; `devmesh-node lan status` and `dm mesh` show it.
+  Devices learn the address from the machine itself and use it with the same pinned host
+  key; a stale address or another host fails and `dm` falls back to paths A/B. mosh works
+  on path L too.
+- `devmesh-lan.timer` (every minute) follows the network: on a trusted LAN sshd also binds
+  the LAN address and the `DEVMESH-LAN` chain accepts that subnet on that interface; on any
+  other network sshd is bound to the devmesh IP and localhost only, as before, and
+  `DEVMESH-LAN` drops ssh/mosh outside the mesh.
+
+### Changed
+
+- `dm update` and unattended updates re-render the sshd config of Linux machines and roll it
+  back if sshd rejects it or does not restart with it.
+
 ## [0.9.16] - 2026-10-25
 
 ### Fixed
