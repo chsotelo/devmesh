@@ -221,8 +221,9 @@ propio Claude Code mantiene; no hace falta instalar nada.
 - **Detener:** elige una sesión y toca `Detener`. Se cierra y libera su memoria, y queda en
   `Historial ›`. Si hay sesiones sin usar hace más de 1 h, una línea ofrece detenerlas todas.
 - **Solas a las 2 h:** las sesiones que corren en devmesh y llevan 2 h sin usarse se detienen
-  solas cada 5 minutos (`DM_CLAUDE_AUTOSTOP_MIN=0` lo desactiva). Las abiertas en otro lado,
-  como una terminal de VS Code, nunca se tocan.
+  solas cada 5 minutos (`DM_CLAUDE_AUTOSTOP_MIN=0` lo desactiva). Su terminal no se cierra: queda
+  dormida mostrando la sesión, y Enter la retoma ahí mismo con toda la conversación. Las que no
+  corren dentro de tmux nunca se tocan.
 - **Historial ›:** las sesiones detenidas con nombre de los últimos 30 días, con buscador.
   `Reanudar` la abre donde quedó, con toda la conversación.
 - **＋ Nueva:** un nombre (viene con la fecha, `27Oct - `) y una carpeta de proyecto; abre

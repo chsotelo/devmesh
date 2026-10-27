@@ -84,6 +84,7 @@ dm_dispatch() {
     _cmove) dm_claude_cmove "$@" ;;
     _claude) dm_claude ;;
     _claude_reap) dm_claude_reap ;;
+    _claude_sleep) dm_claude_sleep "$@" ;;
     _claude_stop) dm_claude_stop "$@" ;;
     _claude_resume) dm_claude_resume "$@" ;;
     _claude_new) dm_claude_new "$@" ;;

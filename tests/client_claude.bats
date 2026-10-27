@@ -235,6 +235,44 @@ transcript() {
   [ ! -d "$DM_CACHE/claude-reap.lock" ]
 }
 
+@test "_claude_reap: the stopped session's terminal stays, asleep, when the pane is back at its shell" {
+  export DM_CACHE="$BATS_TEST_TMPDIR/cache" DM_CLAUDE_AUTOSTOP_MIN=1 DM_SELF="$REPO/client/bin/dm"
+  export STUB_TMUX_DISPLAY="$BATS_TEST_TMPDIR/display"
+  echo zsh >"$STUB_TMUX_DISPLAY"
+  live_session "$SID1" idle "redi:@3.%7" /x n1
+  run --separate-stderr dm_claude_reap
+  [ "$status" -eq 0 ]
+  grep -q "^tmux respawn-pane -k -t %7 '.*bash' '.*/dm' _claude_sleep $SID1\$" "$STUB_LOG"
+}
+
+@test "_claude_reap: a pane running anything but a shell is never replaced" {
+  export DM_CACHE="$BATS_TEST_TMPDIR/cache" DM_CLAUDE_AUTOSTOP_MIN=1 DM_CLAUDE_SLEEP_WAIT=1
+  export STUB_TMUX_DISPLAY="$BATS_TEST_TMPDIR/display"
+  echo vim >"$STUB_TMUX_DISPLAY"
+  live_session "$SID1" idle "redi:@3.%7" /x n1
+  run --separate-stderr dm_claude_reap
+  [ "$status" -eq 0 ]
+  ! grep -q "respawn-pane" "$STUB_LOG"
+}
+
+@test "_claude_sleep: shows the session asleep; Enter resumes it in its folder, then a shell" {
+  transcript "$SID2" "$DM_PROJECTS_DIR/redi" $'19Oct - redi\033[31m'
+  run env SHELL=/bin/echo bash -c "cd / && source \"$REPO/client/bin/dm\" && dm_load_conf && dm_claude_sleep $SID2" <<<""
+  [ "$status" -eq 0 ]
+  [[ $output == *"19Oct - redi"* ]]
+  [[ $output != *$'\033[31m'* ]]
+  [[ $output == *"Enter"* ]]
+  grep -q "^claude --resume $SID2\$" "$STUB_LOG"
+  [[ ${lines[-1]} == "-l" ]]
+}
+
+@test "_claude_sleep: a session resumed or moved elsewhere meanwhile is not started twice" {
+  run env SHELL=/bin/echo bash -c "source \"$REPO/client/bin/dm\" && dm_load_conf && dm_claude_sleep $SID2" <<<""
+  [ "$status" -eq 0 ]
+  ! grep -q "^claude --resume" "$STUB_LOG"
+  [[ ${lines[-1]} == "-l" ]]
+}
+
 @test "_claude_reap: a session that stopped being idle meanwhile is not stopped" {
   export DM_CACHE="$BATS_TEST_TMPDIR/cache" DM_CLAUDE_AUTOSTOP_MIN=1
   live_session "$SID1" idle "redi:@3.%7" /x n1
