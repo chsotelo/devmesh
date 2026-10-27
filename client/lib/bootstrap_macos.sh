@@ -72,6 +72,19 @@ macos_install_client() {
       bs_ensure_line "$rc" "$line"
     fi
   done
+  macos_reap_agent
+}
+
+# Idle Claude sessions stop by themselves: a user agent every 5 minutes. Installed with the
+# client, so "dm update" gives it to machines enrolled before this existed.
+macos_reap_agent() {
+  local bash5
+  bash5="$(macos_brew_bin)/bash"
+  install -d -m 0700 "$MX_CONF_DIR/logs"
+  install -d "$MX_AGENTS"
+  macos_plist net.devmesh.claude-reap '  <key>StartInterval</key><integer>300</integer>' \
+    "$bash5" "$(macos_brew_bin)/dm" _claude_reap >"$MX_AGENTS/net.devmesh.claude-reap.plist"
+  macos_load_agent net.devmesh.claude-reap || bs_log "could not load net.devmesh.claude-reap"
 }
 
 # User-level sshd: localhost only, this user only, keys only (the synced clients.pub).

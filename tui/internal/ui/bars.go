@@ -30,6 +30,13 @@ func (m *Model) crumb() string {
 	switch current.screen {
 	case screenMachine:
 		return crumbArrow + current.arg
+	case screenSession:
+		if session, found := m.selectedSession(); found {
+			return crumbArrow + session.Name
+		}
+		return ""
+	case screenPick, screenMove, screenHistory, screenHistoryItem, screenClaudeNew:
+		return crumbArrow + m.claudeTitle()
 	case screenDetail:
 		return crumbArrow + strings.Join(strings.SplitN(current.arg, "/", 3)[:min(2, strings.Count(current.arg, "/")+1)], crumbArrow)
 	case screenNewMachine:
@@ -91,6 +98,15 @@ func (m *Model) hints() []hint {
 	help := hint{keyQuestion, text(i18n.KeyWordShortcuts)}
 	switch m.top().screen {
 	case screenHome:
+		return []hint{{keyEnter, text(i18n.KeyHintOpen)}, {"n", text(i18n.KeyWordNew)}, {"x", text(i18n.KeyClWordStop)},
+			{"m", text(i18n.KeyWordMove)}, {"t", text(i18n.KeyClWordTerminals)}, {"H", text(i18n.KeyClWordHistory)}, help, {"q", text(i18n.KeyWordQuit)}}
+	case screenSession:
+		return []hint{{"o", text(i18n.KeyHintOpen)}, {"x", text(i18n.KeyClWordStop)}, {"m", text(i18n.KeyWordMove)}, back}
+	case screenPick, screenMove, screenHistory, screenHistoryItem:
+		return []hint{{keyEnter, text(i18n.KeyHintChoose)}, back}
+	case screenClaudeNew:
+		return []hint{{keyEnter, text(i18n.KeyHintCreate)}, {"↑↓", text(i18n.KeyHintChoose)}, back}
+	case screenTerminals:
 		return []hint{{keyEnter, text(i18n.KeyHintOpen)}, {"n", text(i18n.KeyWordNew)}, {keySlash, text(i18n.KeyWordFilter)}, help, {"q", text(i18n.KeyWordQuit)}}
 	case screenNewProject:
 		return []hint{{keyEnter, text(i18n.KeyHintCreate)}, {"↑↓", text(i18n.KeyHintChoose)}, back}

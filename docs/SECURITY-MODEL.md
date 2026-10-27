@@ -91,6 +91,24 @@ Use `dm port` for web servers and databases instead of opening them.
 
 `dm-tui` is a presentation layer and nothing else: it holds no keys, opens no network connection and has no ssh code. Every remote or sensitive operation is done by the bash `dm`, started with an argument vector (never a shell string), and arguments are validated again in Go before they are passed. What machines send (window names, commands, screens, project folders) is untrusted: escape sequences, control characters and bidi marks are stripped before anything is drawn, so a terminal title cannot move the cursor or fake the interface. The binaries travel in the signed client bundle (`devmesh-bundle-v1`), so `dm update` verifies them like the scripts.
 
+## Claude sessions and machine power
+
+- **Stopping sessions:** a session is signalled only after its pid is checked to be a live
+  Claude Code process whose registry file names that session id; stale registry files are
+  ignored. The 2-hour auto-stop runs as the user, only on sessions inside devmesh's tmux,
+  and re-checks idleness right before stopping.
+- **Moving a session** copies its transcript from one machine to another through the
+  controller. The destination trusts what the source sends as conversation history, so a
+  compromised source machine could hand a forged history to the agent on the destination.
+  The copy is capped in size, must look like JSON lines, never overwrites an existing
+  session, and is refused when the project has uncommitted changes or the commits differ.
+  Move only between machines you trust equally.
+- **Power:** Linux nodes get `/etc/polkit-1/rules.d/50-devmesh-power.rules`, which lets the
+  enrolled user (validated name) suspend and power off without a password; that is what a
+  logged-in desktop user can already do locally. Wake-on-WLAN is enabled only on the WiFi
+  connection of the machine's trusted LAN. The panel offers suspend or power off only when
+  another online machine shares that LAN, so the machine can be woken again.
+
 ## Trust dependencies
 
 OpenSSH (signatures, sshd), WireGuard, nginx, ntfy, curl, tmux; in domain mode, Let's Encrypt; for backups, age. A flaw in any of these is outside what the signatures cover.

@@ -6,6 +6,9 @@
 # _feed [HOST]: the mesh (or just one machine) as TSV, one record per line, first field is the record type:
 #   V <version> <device>
 #   M <machine> <OK|EMPTY|OFFLINE> <color> <ip> <lan|-> <mac|-> (the MAC itself is not sent)
+#   C <machine> <sessionId> <status> <idleSecs> <tmux target|-> <rssMB> <cwd> <name>  (live Claude session)
+#   H <machine> <sessionId> <ageSecs> <cwd> <name>                                    (stopped Claude session)
+#   K <machine> <0|1>                                                                  (has Claude)
 #   T <machine> <session> <window> <window name> <active> <command> <agent> <origin> <created> <activity> <clients>
 dm_feed() {
   local only=${1:-}
@@ -15,6 +18,10 @@ dm_feed() {
   fi
   printf 'V\t%s\t%s\n' "$(dm_version)" "${DM_NAME:-}"
   [[ -n $(dm_machines) ]] || return 0
+  local claude_out pid
+  claude_out=$(mktemp)
+  dm_claude_collect "$only" >"$claude_out" &
+  pid=$!
   awk -F'\t' -v OFS='\t' '
     function dash(v) { return v == "" ? "-" : v }
     NR == FNR { ip[$1] = $3; color[$1] = $5; lan[$1] = $7; mac[$1] = ($8 == "-" || $8 == "") ? "-" : "mac"; next }
@@ -29,6 +36,9 @@ dm_feed() {
         print line
       }
     }' "$DM_CACHE/hosts.tsv" <(dm_collect "$only")
+  wait "$pid" || true
+  cat "$claude_out"
+  rm -f "$claude_out"
 }
 
 # _shot HOST SESSION WINDOW: the live screen of a remote terminal (colors kept).

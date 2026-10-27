@@ -1,0 +1,6 @@
+[Unit]
+Description=devmesh: stop Claude Code sessions in tmux that have been idle for hours
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/dm _claude_reap

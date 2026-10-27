@@ -6,7 +6,7 @@ import (
 )
 
 func TestNewTerminalAsksForTheMachineWhenThereAreSeveral(t *testing.T) {
-	m, _ := newTestModel(t, 70, 40, true)
+	m, _ := newTerminalsModel(t, 70, 40, true)
 
 	press(m, "n")
 
@@ -25,7 +25,7 @@ func TestNewTerminalAsksForTheMachineWhenThereAreSeveral(t *testing.T) {
 }
 
 func TestNewTerminalSkipsTheMachineStepWithASingleMachine(t *testing.T) {
-	m, fake := newTestModel(t, 70, 40, true)
+	m, fake := newTerminalsModel(t, 70, 40, true)
 	fake.snapshot = singleMachineSnapshot()
 	m.Update(feedMsg{seq: m.feedSeq, snap: fake.snapshot})
 
@@ -37,19 +37,19 @@ func TestNewTerminalSkipsTheMachineStepWithASingleMachine(t *testing.T) {
 }
 
 func TestNewTerminalWithoutMachinesSaysSo(t *testing.T) {
-	m, fake := newTestModel(t, 70, 40, true)
+	m, fake := newTerminalsModel(t, 70, 40, true)
 	fake.snapshot.Machines = nil
 	m.Update(feedMsg{seq: m.feedSeq, snap: fake.snapshot})
 
 	press(m, "n")
 
-	if text, _ := m.activeNotice(); text != "no machines yet: add one" || m.top().screen != screenHome {
+	if text, _ := m.activeNotice(); text != "no machines yet: add one" || m.top().screen != screenTerminals {
 		t.Fatalf("notice=%q route=%+v", text, m.top())
 	}
 }
 
 func TestTypingANameCreatesAFreeTerminal(t *testing.T) {
-	m, fake := newTestModel(t, 70, 40, true)
+	m, fake := newTerminalsModel(t, 70, 40, true)
 	fake.snapshot = singleMachineSnapshot()
 	m.Update(feedMsg{seq: m.feedSeq, snap: fake.snapshot})
 	drain(t, m, press(m, "n"))
@@ -72,7 +72,7 @@ func TestTypingANameCreatesAFreeTerminal(t *testing.T) {
 }
 
 func TestPickingAProjectCreatesItsTerminalInThatFolder(t *testing.T) {
-	m, fake := newTestModel(t, 70, 40, true)
+	m, fake := newTerminalsModel(t, 70, 40, true)
 	fake.snapshot = singleMachineSnapshot()
 	m.Update(feedMsg{seq: m.feedSeq, snap: fake.snapshot})
 	drain(t, m, press(m, "n"))
@@ -86,7 +86,7 @@ func TestPickingAProjectCreatesItsTerminalInThatFolder(t *testing.T) {
 }
 
 func TestAnExactProjectMatchComesBeforeTheFreeNameRow(t *testing.T) {
-	m, fake := newTestModel(t, 70, 40, true)
+	m, fake := newTerminalsModel(t, 70, 40, true)
 	fake.snapshot = singleMachineSnapshot()
 	m.Update(feedMsg{seq: m.feedSeq, snap: fake.snapshot})
 	drain(t, m, press(m, "n"))
@@ -100,7 +100,7 @@ func TestAnExactProjectMatchComesBeforeTheFreeNameRow(t *testing.T) {
 }
 
 func TestEnterWithNothingTypedAndNoProjectsAsksForAName(t *testing.T) {
-	m, fake := newTestModel(t, 70, 40, true)
+	m, fake := newTerminalsModel(t, 70, 40, true)
 	fake.snapshot = singleMachineSnapshot()
 	fake.projects = nil
 	m.Update(feedMsg{seq: m.feedSeq, snap: fake.snapshot})
@@ -114,7 +114,7 @@ func TestEnterWithNothingTypedAndNoProjectsAsksForAName(t *testing.T) {
 }
 
 func TestOutsideTmuxCreatingValidatesBeforeTakingTheScreen(t *testing.T) {
-	m, fake := newTestModel(t, 70, 40, false)
+	m, fake := newTerminalsModel(t, 70, 40, false)
 	fake.snapshot = singleMachineSnapshot()
 	m.Update(feedMsg{seq: m.feedSeq, snap: fake.snapshot})
 	drain(t, m, press(m, "n"))
@@ -140,7 +140,7 @@ func TestOutsideTmuxCreatingValidatesBeforeTakingTheScreen(t *testing.T) {
 }
 
 func TestEscLeavesTheProjectStepAndClearsTheTypedName(t *testing.T) {
-	m, fake := newTestModel(t, 70, 40, true)
+	m, fake := newTerminalsModel(t, 70, 40, true)
 	fake.snapshot = singleMachineSnapshot()
 	m.Update(feedMsg{seq: m.feedSeq, snap: fake.snapshot})
 	drain(t, m, press(m, "n"))
@@ -148,13 +148,13 @@ func TestEscLeavesTheProjectStepAndClearsTheTypedName(t *testing.T) {
 
 	press(m, "esc")
 
-	if m.top().screen != screenHome || m.input.Value() != "" {
+	if m.top().screen != screenTerminals || m.input.Value() != "" {
 		t.Fatalf("route=%+v input=%q", m.top(), m.input.Value())
 	}
 }
 
 func TestAddDeviceRejectsABadNameAndAcceptsAGoodOne(t *testing.T) {
-	m, _ := newTestModel(t, 70, 40, true)
+	m, _ := newTerminalsModel(t, 70, 40, true)
 	press(m, "a")
 	if m.top().screen != screenAdd {
 		t.Fatalf("route = %+v", m.top())
@@ -177,13 +177,13 @@ func TestAddDeviceRejectsABadNameAndAcceptsAGoodOne(t *testing.T) {
 	typeText(m, "lap-2")
 	cmd := press(m, "enter")
 
-	if cmd == nil || m.top().screen != screenHome {
+	if cmd == nil || m.top().screen != screenTerminals {
 		t.Fatalf("cmd=%v route=%+v", cmd, m.top())
 	}
 }
 
 func TestShortcutsDoNotFireWhileTypingAName(t *testing.T) {
-	m, _ := newTestModel(t, 70, 40, true)
+	m, _ := newTerminalsModel(t, 70, 40, true)
 	press(m, "a")
 
 	typeText(m, "send")
@@ -194,7 +194,7 @@ func TestShortcutsDoNotFireWhileTypingAName(t *testing.T) {
 }
 
 func TestMachineMenuShortcutsActOnThatMachine(t *testing.T) {
-	m, _ := newTestModel(t, 70, 50, true)
+	m, _ := newTerminalsModel(t, 70, 50, true)
 	press(m, "up", "enter")
 
 	press(m, "n")
@@ -205,7 +205,7 @@ func TestMachineMenuShortcutsActOnThatMachine(t *testing.T) {
 }
 
 func TestMachineMenuMainTerminalOpensTheMainSession(t *testing.T) {
-	m, fake := newTestModel(t, 70, 50, true)
+	m, fake := newTerminalsModel(t, 70, 50, true)
 	press(m, "up", "enter")
 
 	drain(t, m, press(m, "enter"))

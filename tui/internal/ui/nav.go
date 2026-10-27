@@ -27,13 +27,13 @@ func (m *Model) bodyHeight() int {
 
 // hasInputBox reports whether the rounded input is shown above the hints.
 func (m *Model) hasInputBox() bool {
-	switch m.top().screen {
+	switch current := m.top().screen; current {
 	case screenNewProject, screenAdd:
 		return true
-	case screenHome:
+	case screenTerminals:
 		return m.filterOn || m.filter.Value() != ""
 	default:
-		return false
+		return hasTextInput(current)
 	}
 }
 

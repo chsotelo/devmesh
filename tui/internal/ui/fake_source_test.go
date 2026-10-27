@@ -36,6 +36,11 @@ type fakeSource struct {
 	created   []string
 	validated []string
 	refreshes int
+	// claudeCalls records the Claude actions as "verb|args"; claudeSession is what the
+	// starting ones answer with, claudeErr what they fail with.
+	claudeCalls   []string
+	claudeSession string
+	claudeErr     error
 }
 
 func (f *fakeSource) Feed(context.Context) (feed.Snapshot, error) {
@@ -90,6 +95,32 @@ func (f *fakeSource) ToolCommand(tool string, args ...string) *exec.Cmd {
 	return exec.Command("true", append([]string{tool}, args...)...)
 }
 
+func (f *fakeSource) recordClaude(call string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.claudeCalls = append(f.claudeCalls, call)
+}
+
+func (f *fakeSource) StopClaude(_ context.Context, host, id string) error {
+	f.recordClaude("stop|" + host + "|" + id)
+	return f.claudeErr
+}
+
+func (f *fakeSource) ResumeClaude(_ context.Context, host, id string) (string, error) {
+	f.recordClaude("resume|" + host + "|" + id)
+	return f.claudeSession, f.claudeErr
+}
+
+func (f *fakeSource) NewClaude(_ context.Context, host, name, project string) (string, error) {
+	f.recordClaude("new|" + host + "|" + name + "|" + project)
+	return f.claudeSession, f.claudeErr
+}
+
+func (f *fakeSource) MoveClaude(_ context.Context, from, id, to string) (string, error) {
+	f.recordClaude("move|" + from + "|" + id + "|" + to)
+	return f.claudeSession, f.claudeErr
+}
+
 var errFeedDown = errors.New("hub unreachable")
 
 // sampleSnapshot is the mesh of every layout test: one busy machine, one off, one empty.
@@ -129,6 +160,15 @@ func newTestModel(t *testing.T, width, height int, inTmux bool) (*Model, *fakeSo
 	for key, lines := range fake.screens {
 		model.shots[key] = shot{lines: lines, at: fixedNow}
 	}
+	return model, fake
+}
+
+// newTerminalsModel is newTestModel already on the terminals screen (the grid of cards).
+func newTerminalsModel(t *testing.T, width, height int, inTmux bool) (*Model, *fakeSource) {
+	t.Helper()
+	model, fake := newTestModel(t, width, height, inTmux)
+	model.routes = append(model.routes, route{screen: screenTerminals})
+	model.resolveSelection()
 	return model, fake
 }
 

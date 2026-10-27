@@ -31,12 +31,15 @@ func (m *Model) tap(x, y int) tea.Cmd {
 func (m *Model) scrollBy(lines int) tea.Cmd {
 	switch m.top().screen {
 	case screenHome:
+		m.scrollClaude(lines / wheelStep)
+		return m.refreshShots()
+	case screenTerminals:
 		layout := m.homeLayout()
 		m.scroll = clampScroll(m.scroll+lines, len(layout.lines), m.bodyHeight())
 		return m.refreshShots()
 	case screenDevices:
 		m.cursor = max(m.cursor+lines, 0)
-	case screenMachine, screenNewMachine, screenNewProject:
+	case screenMachine, screenNewMachine, screenNewProject, screenPick, screenMove, screenHistory, screenHistoryItem, screenClaudeNew:
 		m.moveCursor(lines / wheelStep)
 	}
 	return nil

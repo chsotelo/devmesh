@@ -234,6 +234,34 @@ that touches a machine is done by `dm`, as before. Where there is no `dm-tui` fo
 system, or with `DM_TUI=0 dm`, the classic fzf panel is used instead (with an fzf older than
 0.66, a one-menu-at-a-time version). If tmux is missing, the panel runs without tabs.
 
+### Claude sessions
+
+The list on the left shows that machine's **Claude Code sessions** by the name you gave them
+(`claude --name "19Oct - redi general"`) and one word of state: `working`, `waiting`, or how
+long they have been idle (`20 min`, `5 h`, `3 d`). Tap one and it opens on the right: type
+there as usual. devmesh reads the session registry Claude Code keeps itself; nothing to
+install.
+
+- **Stop:** select a session and tap `Stop`. It ends and frees its memory, and stays in
+  `History ›`. When sessions have been idle for over 1 h, one line offers to stop them all.
+- **On their own after 2 h:** sessions running in devmesh that sit idle for 2 h stop by
+  themselves, checked every 5 minutes (`DM_CLAUDE_AUTOSTOP_MIN=0` turns it off). Sessions
+  started elsewhere, such as a VS Code terminal, are never touched.
+- **History ›:** named, stopped sessions from the last 30 days, with a search box.
+  `Resume` reopens one where it left off, with the whole conversation.
+- **＋ New:** a name (prefilled with the date, `27Oct - `) and a project folder; it starts
+  `claude --name` there.
+- **Move to <machine>:** stops the session here and resumes it on the other machine with
+  the whole conversation; from then on that machine provides the memory, CPU and runs the
+  commands (you keep seeing and typing from wherever you are). The other machine needs
+  Claude installed and the same project under `~/PROJECTS` at the same commit: with
+  uncommitted changes or different commits it tells you what to do instead of moving.
+- **Terminals ›:** your usual terminals.
+- **`⏻` suspend, power off, wake:** only what can be undone from here is offered. A machine
+  is suspended or powered off only when another online machine shares its trusted network
+  and Wake-on-WLAN is on, so it can be woken again. Power off asks twice and only the power
+  button turns it back on. The machine you are on never powers itself off.
+
 ### Language
 
 The panel and the device setup messages are in **English** by default. For Spanish set

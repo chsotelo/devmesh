@@ -210,6 +210,34 @@ Panel de tarjetas (`DM_UI=cards`): está hecho para el tacto (un celular o una t
 - El panel es el programa `dm-tui` que viene con el cliente. Solo dibuja: todo lo que toca una máquina lo hace `dm`, como antes. Donde no hay `dm-tui` para tu sistema, o con `DM_TUI=0 dm`, se usa el panel clásico con fzf (con un fzf anterior a 0.66, una versión de un menú a la vez). Sin tmux, el panel corre sin pestañas.
 - `Ctrl+a p` vuelve al panel y `Ctrl+a n` pasa a la pestaña siguiente.
 
+### Sesiones de Claude
+
+La lista de la izquierda muestra las **sesiones de Claude Code** de esa máquina con el nombre
+que les pusiste (`claude --name "19Oct - redi general"`) y una palabra de estado:
+`trabajando`, `te espera` o cuánto llevan sin usarse (`20 min`, `5 h`, `3 d`). Tócala y se
+abre a la derecha: escribes ahí como siempre. devmesh lee el registro de sesiones que el
+propio Claude Code mantiene; no hace falta instalar nada.
+
+- **Detener:** elige una sesión y toca `Detener`. Se cierra y libera su memoria, y queda en
+  `Historial ›`. Si hay sesiones sin usar hace más de 1 h, una línea ofrece detenerlas todas.
+- **Solas a las 2 h:** las sesiones que corren en devmesh y llevan 2 h sin usarse se detienen
+  solas cada 5 minutos (`DM_CLAUDE_AUTOSTOP_MIN=0` lo desactiva). Las abiertas en otro lado,
+  como una terminal de VS Code, nunca se tocan.
+- **Historial ›:** las sesiones detenidas con nombre de los últimos 30 días, con buscador.
+  `Reanudar` la abre donde quedó, con toda la conversación.
+- **＋ Nueva:** un nombre (viene con la fecha, `27Oct - `) y una carpeta de proyecto; abre
+  `claude --name` ahí.
+- **Mover a <máquina>:** detiene la sesión aquí y la retoma en la otra máquina con toda la
+  conversación; desde entonces la memoria, el procesador y los comandos son de esa máquina
+  (tú la sigues viendo y escribiendo desde donde estés). La otra máquina necesita Claude
+  instalado y el mismo proyecto en `~/PROJECTS` con el mismo commit: si hay cambios sin
+  commit o los commits no coinciden, te dice qué hacer en vez de mover.
+- **Terminales ›:** tus terminales normales, como siempre.
+- **`⏻` suspender, apagar, despertar:** solo se ofrece lo que se puede deshacer desde aquí.
+  Una máquina se suspende o se apaga solo si otra máquina en línea comparte su red de
+  confianza y tiene Wake-on-WLAN activo, para poder despertarla. Apagar pide confirmar dos
+  veces y solo se vuelve a prender con su botón. La máquina donde estás nunca se apaga sola.
+
 ### Idioma
 
 El panel y los mensajes de alta de dispositivos salen en **inglés** por defecto. Para español usa `DM_LANG=es` (por ejemplo `DM_LANG=es dm`) o un idioma del sistema en español (`LANG=es_PE.UTF-8`). Lo que falte en la traducción sale en inglés.

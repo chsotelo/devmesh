@@ -1,6 +1,8 @@
 // Package feed holds the data the panel shows and the parser for the "dm _feed" output.
 package feed
 
+import "strings"
+
 // AgentState is what a coding agent in a terminal reports through "dm agent".
 type AgentState string
 
@@ -48,6 +50,49 @@ func (t Terminal) Title() string {
 	return t.Session + ":" + t.Window
 }
 
+// ClaudeStatus is what a Claude Code session is doing, as the panel shows it.
+type ClaudeStatus string
+
+// Claude session states. A machine reports busy, shell, waiting or idle; busy and shell
+// both mean the session is working.
+const (
+	ClaudeWorking ClaudeStatus = "working"
+	ClaudeWaiting ClaudeStatus = "waiting"
+	ClaudeIdle    ClaudeStatus = "idle"
+)
+
+// ClaudeSession is a Claude Code session that is running on a machine.
+type ClaudeSession struct {
+	Machine  string
+	ID       string
+	Status   ClaudeStatus
+	IdleSecs int64
+	// Tmux is the "session:@window.%pane" the session runs in; empty when it was started
+	// outside tmux (a VS Code terminal), which devmesh cannot open.
+	Tmux  string
+	RSSMB int
+	Cwd   string
+	Name  string
+}
+
+// Openable reports whether the session runs in tmux, so the panel can open it.
+func (s ClaudeSession) Openable() bool { return s.TmuxSession() != "" }
+
+// TmuxSession is the tmux session name of the target ("" when there is none).
+func (s ClaudeSession) TmuxSession() string {
+	name, _, _ := strings.Cut(s.Tmux, ":")
+	return name
+}
+
+// ClaudeHistory is a stopped Claude Code session that can be resumed.
+type ClaudeHistory struct {
+	Machine string
+	ID      string
+	AgeSecs int64
+	Cwd     string
+	Name    string
+}
+
 // Machine is a Linux or Mac host that holds terminals.
 type Machine struct {
 	Name      string
@@ -56,7 +101,12 @@ type Machine struct {
 	IP        string
 	LAN       string
 	HasMAC    bool
-	Terminals []Terminal
+	HasClaude bool
+	// ClaudeKnown is false when the machine's devmesh is too old to report Claude at all.
+	ClaudeKnown bool
+	Terminals   []Terminal
+	Claude      []ClaudeSession
+	History     []ClaudeHistory
 }
 
 // IsReachable reports whether the machine can be used.

@@ -6,7 +6,15 @@ type screen int
 
 // The screens, in the order of the user's journey.
 const (
+	// screenHome is the Claude sessions of one machine; the terminals are one tap away.
 	screenHome screen = iota
+	screenTerminals
+	screenSession
+	screenPick
+	screenMove
+	screenHistory
+	screenHistoryItem
+	screenClaudeNew
 	screenMachine
 	screenDetail
 	screenNewMachine
@@ -49,6 +57,19 @@ const (
 	verbSubmit
 	verbMove
 	verbCreate
+	verbSay
+	verbOpenClaude
+	verbViewMachine
+	verbPickMachine
+	verbStop
+	verbStopIdle
+	verbMoveTo
+	verbMoveMenu
+	verbHistory
+	verbTerminals
+	verbResume
+	verbHistoryItem
+	verbClaudeCreate
 )
 
 // intent is a verb with its argument.

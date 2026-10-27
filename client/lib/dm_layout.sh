@@ -8,7 +8,7 @@
 # ("dm _ws <sub>"); the sidebar only draws. Values reaching a tmux command string are
 # validated first (machine name, session name, digits) and only then single quoted.
 
-readonly DM_LY_SIDE_COLS=24
+readonly DM_LY_SIDE_COLS=32
 readonly DM_LY_NARROW_COLS=70
 readonly DM_LY_SETTLE=0.4
 readonly DM_LY_SYNC_EVERY=60

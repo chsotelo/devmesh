@@ -99,7 +99,7 @@ setup_client() {
   printf 'pc2\tmachine\t10.73.0.3\t2203\t24\tdev\thome\t-\n' >>"$DM_CACHE/hosts.tsv"
   printf 'tablet\tphone\t10.73.0.4\t-\t-\t-\t-\t-\n' >>"$DM_CACHE/hosts.tsv"
   local l
-  for l in dm_core dm_remote dm_terms dm_files dm_admin dm_repoint dm_trust dm_ui dm_app dm_workspace dm_layout dm_watch dm_vscode tui_target dm_feed; do
+  for l in dm_core dm_remote dm_terms dm_files dm_admin dm_repoint dm_trust dm_ui dm_app dm_workspace dm_layout dm_watch dm_vscode tui_target dm_feed dm_claude dm_power; do
     # shellcheck source=/dev/null
     source "$REPO/client/lib/$l.sh"
   done
@@ -109,7 +109,7 @@ setup_client() {
 # ssh_reply ALIAS "CMD WORDS" CONTENT — canned output of a remote command.
 ssh_reply() {
   mkdir -p "$STUB_SSH_DIR/$1"
-  printf '%s' "$3" >"$STUB_SSH_DIR/$1/$(tr ' ' '_' <<<"$2")"
+  printf '%s' "$3" >"$STUB_SSH_DIR/$1/$(tr ' /' '_%' <<<"$2")"
 }
 
 # min_cfg [HOSTNAME] — smallest ssh_config "dm refresh" accepts: hub-admin with the trust options.

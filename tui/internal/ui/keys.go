@@ -49,6 +49,13 @@ var homeKeys = map[string]intent{
 	keyEnter: {verb: verbActivate}, "o": {verb: verbOpenTerminal}, keySlash: {verb: verbFilter},
 }
 
+// claudeKeys are the shortcuts of the Claude sessions: open, stop, move; and, on the home
+// list only, the terminals and the history.
+var claudeKeys = map[string]intent{
+	"o": {verbOpenClaude, "", ""}, "x": {verbStop, "", ""}, "m": {verbMoveMenu, "", ""},
+	"t": {verbTerminals, "", ""}, "H": {verbHistory, "", ""},
+}
+
 // handleKey routes a key press: the text input when one is active, else the shortcuts.
 func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	name := msg.String()
@@ -78,10 +85,13 @@ func (m *Model) handleScreenKey(name string) tea.Cmd {
 	if direction, found := moveKeys[name]; found && m.movable(screenKind) {
 		return m.applyIntent(intent{verb: verbMove, arg: direction})
 	}
-	if name == keyEnter && screenKind != screenHome {
+	if name == keyEnter && screenKind != screenTerminals {
 		return m.applyIntent(intent{verb: verbSubmit})
 	}
-	if act, found := homeKeys[name]; found && (screenKind == screenHome || (screenKind == screenDetail && act.verb == verbOpenTerminal)) {
+	if act, found := claudeKeys[name]; found && m.claudeKeyFits(screenKind, act.verb) {
+		return m.applyIntent(act)
+	}
+	if act, found := homeKeys[name]; found && (screenKind == screenTerminals || (screenKind == screenDetail && act.verb == verbOpenTerminal)) {
 		return m.applyIntent(act)
 	}
 	if act, found := commandKeys[name]; found && m.accepts(screenKind, act.verb) {
@@ -91,12 +101,24 @@ func (m *Model) handleScreenKey(name string) tea.Cmd {
 }
 
 // movable reports whether the screen has a cursor or a scroll position.
-func (m *Model) movable(kind screen) bool { return kind != screenHelp && kind != screenDetail }
+func (m *Model) movable(kind screen) bool {
+	return kind != screenHelp && kind != screenDetail && kind != screenSession
+}
+
+// claudeKeyFits reports whether a Claude shortcut applies on a screen.
+func (m *Model) claudeKeyFits(kind screen, action verb) bool {
+	switch action {
+	case verbTerminals, verbHistory:
+		return kind == screenHome
+	default:
+		return kind == screenHome || kind == screenSession
+	}
+}
 
 // accepts reports whether a shortcut action makes sense on a screen.
 func (m *Model) accepts(kind screen, action verb) bool {
 	switch kind {
-	case screenHome, screenMachine, screenDetail:
+	case screenHome, screenTerminals, screenMachine, screenDetail:
 		return true
 	case screenDevices:
 		return action == verbAdd || action == verbRefresh
@@ -113,7 +135,7 @@ func (m *Model) handleTypingKey(msg tea.KeyMsg) tea.Cmd {
 	case keyEnter:
 		return m.applyIntent(intent{verb: verbSubmit})
 	case keyUp, keyDown:
-		if m.top().screen == screenNewProject {
+		if current := m.top().screen; current == screenNewProject || isClaudeList(current) {
 			return m.applyIntent(intent{verb: verbMove, arg: moveKeys[msg.String()]})
 		}
 	}
@@ -123,7 +145,7 @@ func (m *Model) handleTypingKey(msg tea.KeyMsg) tea.Cmd {
 // typeInto feeds a key to the input of the screen and reacts to the new text.
 func (m *Model) typeInto(msg tea.KeyMsg) tea.Cmd {
 	field := &m.input
-	if m.top().screen == screenHome {
+	if m.top().screen == screenTerminals {
 		field = &m.filter
 	}
 	before := field.Value()
@@ -132,7 +154,7 @@ func (m *Model) typeInto(msg tea.KeyMsg) tea.Cmd {
 	if field.Value() != before {
 		m.cursor = 0
 		m.scroll = 0
-		if m.top().screen == screenHome {
+		if m.top().screen == screenTerminals {
 			m.resolveSelection()
 		}
 	}

@@ -28,6 +28,14 @@ type fakeSource struct {
 	snap  feed.Snapshot
 	shown string
 	calls []string
+	// mesh is the whole mesh, projects the folders and session what the Claude actions
+	// that start a session answer with.
+	mesh     feed.Snapshot
+	projects []string
+	session  string
+	// power is what dm allows (PowerCheck) and powerErr what a power action fails with.
+	power    source.PowerState
+	powerErr error
 }
 
 func (f *fakeSource) FeedHost(context.Context, string) (feed.Snapshot, error) { return f.snap, nil }
@@ -47,6 +55,40 @@ func (f *fakeSource) Hold(_ context.Context, host, kind string) error {
 func (f *fakeSource) Act(_ context.Context, host, action string) error {
 	f.record("act " + host + " " + action)
 	return nil
+}
+
+func (f *fakeSource) Feed(context.Context) (feed.Snapshot, error) { return f.mesh, nil }
+
+func (f *fakeSource) Projects(context.Context, string) ([]string, error) { return f.projects, nil }
+
+func (f *fakeSource) StopClaude(_ context.Context, host, id string) error {
+	f.record("stop " + host + " " + id)
+	return nil
+}
+
+func (f *fakeSource) ResumeClaude(_ context.Context, host, id string) (string, error) {
+	f.record("resume " + host + " " + id)
+	return f.session, nil
+}
+
+func (f *fakeSource) NewClaude(_ context.Context, host, name, project string) (string, error) {
+	f.record("new " + host + " " + name + " " + project)
+	return f.session, nil
+}
+
+func (f *fakeSource) MoveClaude(_ context.Context, from, id, to string) (string, error) {
+	f.record("move " + from + " " + id + " " + to)
+	return f.session, nil
+}
+
+func (f *fakeSource) PowerCheck(_ context.Context, host string) (source.PowerState, error) {
+	f.record("powercheck " + host)
+	return f.power, nil
+}
+
+func (f *fakeSource) Power(_ context.Context, host, action string) error {
+	f.record("power " + host + " " + action)
+	return f.powerErr
 }
 
 func (f *fakeSource) record(call string) {
@@ -75,6 +117,7 @@ func loaded(t *testing.T, src *fakeSource) *Model {
 	t.Helper()
 	m := New(Options{Host: "lap", Source: src, Catalog: i18n.Fallback()})
 	m.width, m.height = testWidth, 30
+	m.claude.mode = modeTerminals
 	return m
 }
 
@@ -104,6 +147,9 @@ func run(m *Model, cmd tea.Cmd) {
 		m.Update(msg)
 	case pollMsg:
 		run(m, m.applyPoll(msg))
+	case claudeDoneMsg, meshMsg, projectsMsg, powerCheckMsg, powerDoneMsg:
+		_, follow := m.Update(msg)
+		run(m, follow)
 	}
 }
 
@@ -312,10 +358,10 @@ func TestTheTopButtonsAndTheirKeysAddAndDeleteTerminals(t *testing.T) {
 	buttons := m.buttons()
 
 	for _, msg := range []tea.Msg{
-		tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: buttons[0].from, Y: 0},
-		tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: buttons[1].to - 1, Y: buttonHeight - 1},
+		tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: buttons[1].from, Y: 0},
+		tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: buttons[2].to - 1, Y: buttonHeight - 1},
 		tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: 0, Y: 1},
-		tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: buttons[0].from, Y: buttonHeight},
+		tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: buttons[1].from, Y: buttonHeight},
 		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")},
 		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")},
 	} {
@@ -376,6 +422,7 @@ func TestARememberedListDrawsAtOnceAndPutsItsTerminalOnScreenBeforeReading(t *te
 	mem := &fakeMemory{has: true, saved: Saved{Rows: []Row{{Session: "api", Window: "1"}, {Session: "web", Window: "2"}}, Online: true, Shown: "web"}}
 	m := New(Options{Host: "lap", Source: src, Catalog: i18n.Fallback(), Memory: mem})
 	m.width, m.height = testWidth, 10
+	m.claude.mode = modeTerminals
 
 	view := m.View()
 	if strings.Contains(view, "Loading") || !strings.Contains(view, ">_ web") {

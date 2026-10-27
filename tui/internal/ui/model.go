@@ -87,6 +87,11 @@ type Model struct {
 	noticeError bool
 	noticeUntil time.Time
 
+	claudeHost   string
+	claudeSel    string
+	claudeScroll int
+	claudeBusy   bool
+
 	lastIntent intent
 	finished   bool
 }
@@ -153,13 +158,13 @@ func (m *Model) pop() {
 
 // typing reports whether the keyboard goes to a text input.
 func (m *Model) typing() bool {
-	switch m.top().screen {
+	switch current := m.top().screen; current {
 	case screenNewProject, screenAdd:
 		return true
-	case screenHome:
+	case screenTerminals:
 		return m.filterOn
 	default:
-		return false
+		return hasTextInput(current)
 	}
 }
 

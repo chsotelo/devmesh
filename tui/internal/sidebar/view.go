@@ -33,6 +33,9 @@ const (
 	buttonMargin = 1
 	buttonGap    = 1
 	addLabel     = "+ "
+	// actionBack is the button that leaves the terminal list for the Claude sessions.
+	actionBack = "back"
+	backWidth  = 5
 )
 
 // button is a clickable box of the top lines, from column from up to (not including) to.
@@ -46,16 +49,20 @@ type button struct {
 // buttons splits the width between the buttons: "[  + New  ] [ Delete ]".
 func (m *Model) buttons() []button {
 	labels := []struct{ label, action string }{
+		{strings.TrimSpace(backGlyph), actionBack},
 		{addLabel + m.cat.Text(i18n.KeyBtnNew), source.ActAdd},
 		{m.cat.Text(i18n.KeyBtnDelete), source.ActDelete},
 	}
-	room := m.width - 2*buttonMargin - buttonGap*(len(labels)-1)
+	room := m.width - 2*buttonMargin - buttonGap*(len(labels)-1) - backWidth
 	at := buttonMargin
 	out := make([]button, 0, len(labels))
 	for i, item := range labels {
-		width := max(room/len(labels), 1)
-		if i == len(labels)-1 {
-			width = max(room-width*(len(labels)-1), 1)
+		width := max(room/(len(labels)-1), 1)
+		switch i {
+		case 0:
+			width = backWidth
+		case len(labels) - 1:
+			width = max(room-width*(len(labels)-2), 1)
 		}
 		out = append(out, button{label: item.label, action: item.action, from: at, to: at + width})
 		at += width + buttonGap
@@ -96,6 +103,9 @@ func centered(text string, width int) string {
 func (m *Model) View() string {
 	if m.width <= 0 {
 		return ""
+	}
+	if m.claude.mode != modeTerminals {
+		return m.claudeView()
 	}
 	lines := m.buttonBlock()
 	switch {

@@ -55,7 +55,7 @@ func TestThumbnailHeightAdaptsToTheRoom(t *testing.T) {
 }
 
 func TestPhoneShowsOneColumnOfCards(t *testing.T) {
-	m, _ := newTestModel(t, 45, 30, true)
+	m, _ := newTerminalsModel(t, 45, 30, true)
 
 	assertFits(t, m, 45, 30)
 	lines := viewLines(m)
@@ -76,7 +76,7 @@ func TestPhoneShowsOneColumnOfCards(t *testing.T) {
 }
 
 func TestPortraitTabletShowsTwoColumnsAndFillsTheScreen(t *testing.T) {
-	m, _ := newTestModel(t, 70, 50, true)
+	m, _ := newTerminalsModel(t, 70, 50, true)
 
 	assertFits(t, m, 70, 50)
 	sideBySide := false
@@ -98,7 +98,7 @@ func TestPortraitTabletShowsTwoColumnsAndFillsTheScreen(t *testing.T) {
 }
 
 func TestWideScreenAddsTheDetailPaneWithTheLiveScreen(t *testing.T) {
-	m, _ := newTestModel(t, 160, 45, true)
+	m, _ := newTerminalsModel(t, 160, 45, true)
 
 	assertFits(t, m, 160, 45)
 	text := m.View()
@@ -113,7 +113,7 @@ func TestWideScreenAddsTheDetailPaneWithTheLiveScreen(t *testing.T) {
 }
 
 func TestOfflineAndEmptyMachinesExplainThemselves(t *testing.T) {
-	m, _ := newTestModel(t, 70, 50, true)
+	m, _ := newTerminalsModel(t, 70, 50, true)
 
 	text := m.View()
 
@@ -125,7 +125,7 @@ func TestOfflineAndEmptyMachinesExplainThemselves(t *testing.T) {
 }
 
 func TestEmptyMeshShowsTheFriendlyCardWithAnAddButton(t *testing.T) {
-	m, fake := newTestModel(t, 70, 30, true)
+	m, fake := newTerminalsModel(t, 70, 30, true)
 	fake.snapshot = feed.Snapshot{Device: "tablet", Version: "0.9.0"}
 	m.Update(feedMsg{seq: m.feedSeq, snap: fake.snapshot})
 
@@ -154,7 +154,7 @@ func TestBeforeTheFirstReadingItSaysLoading(t *testing.T) {
 }
 
 func TestATinyWindowAsksForMoreRoom(t *testing.T) {
-	m, _ := newTestModel(t, 20, 8, true)
+	m, _ := newTerminalsModel(t, 20, 8, true)
 
 	if !strings.Contains(m.View(), "window too small") {
 		t.Fatalf("view:\n%s", m.View())
@@ -163,7 +163,7 @@ func TestATinyWindowAsksForMoreRoom(t *testing.T) {
 }
 
 func TestHostileFeedTextNeverReachesTheScreen(t *testing.T) {
-	m, fake := newTestModel(t, 70, 40, true)
+	m, fake := newTerminalsModel(t, 70, 40, true)
 	fake.snapshot = feed.Parse("V\t0.9.0\ttablet\nM\tlaptop\tOK\t33\t10.0.0.2\t-\t-\n" +
 		"T\tlaptop\tapi\t1\tn\t1\t\x1b[2Jclaude\x1b]0;x\x07\twaiting\tev\x1bil\t1700000000\t1700000000\t\x1b[31mbob\n")
 	m.Update(feedMsg{seq: m.feedSeq, snap: fake.snapshot})
@@ -179,7 +179,7 @@ func TestHostileFeedTextNeverReachesTheScreen(t *testing.T) {
 }
 
 func TestLongThumbnailLinesAreCutNotWrapped(t *testing.T) {
-	m, _ := newTestModel(t, 45, 30, true)
+	m, _ := newTerminalsModel(t, 45, 30, true)
 	m.shots["laptop/api/1"] = shot{lines: []string{strings.Repeat("x", 300), "日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語"}, at: fixedNow}
 
 	assertFits(t, m, 45, 30)
@@ -189,7 +189,7 @@ func TestLongThumbnailLinesAreCutNotWrapped(t *testing.T) {
 }
 
 func TestMachineSectionsHaveStableCells(t *testing.T) {
-	m, _ := newTestModel(t, 70, 50, true)
+	m, _ := newTerminalsModel(t, 70, 50, true)
 
 	layout := m.homeLayout()
 
@@ -202,7 +202,7 @@ func TestMachineSectionsHaveStableCells(t *testing.T) {
 }
 
 func TestFilterShowsOnlyMatchingTerminals(t *testing.T) {
-	m, _ := newTestModel(t, 70, 50, true)
+	m, _ := newTerminalsModel(t, 70, 50, true)
 
 	press(m, "/")
 	typeText(m, "docs")
@@ -220,7 +220,7 @@ func TestFilterShowsOnlyMatchingTerminals(t *testing.T) {
 }
 
 func TestSpanishCatalogTranslatesTheTopBar(t *testing.T) {
-	m, fake := newTestModel(t, 70, 30, true)
+	m, fake := newTerminalsModel(t, 70, 30, true)
 	m.cat = i18n.Parse("M_WORD_NEW=nueva\nM_WORD_SEND=enviar\nM_STATE_WAITING=esperando\n").WithFallback()
 	m.Update(feedMsg{seq: m.feedSeq, snap: fake.snapshot})
 

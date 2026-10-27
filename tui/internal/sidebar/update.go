@@ -15,12 +15,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.keepVisible()
+		m.keepClaudeVisible()
 	case tickMsg:
 		return m, m.startPoll()
 	case pollMsg:
 		return m, m.applyPoll(msg)
 	case doneMsg:
 		m.err = errorText(msg.err)
+	case meshMsg:
+		m.applyMesh(msg)
+	case projectsMsg:
+		m.applyProjects(msg)
+	case claudeDoneMsg:
+		return m, m.applyClaudeDone(msg)
+	case powerCheckMsg:
+		m.applyPowerCheck(msg)
+	case powerDoneMsg:
+		return m, m.applyPowerDone(msg)
 	case tea.KeyMsg:
 		return m, m.handleKey(msg)
 	case tea.MouseMsg:
@@ -65,10 +76,18 @@ func (m *Model) applyPoll(msg pollMsg) tea.Cmd {
 		m.cursor = at
 	}
 	m.loaded = true
+	m.claude.machine, m.claude.polled = machine, true
+	m.resolveClaudeSelection()
 	m.cursor = min(m.cursor, max(len(m.rows)-1, 0))
 	m.keepVisible()
+	m.keepClaudeVisible()
 	decided := m.decide()
-	return tea.Batch(next, decided, m.remember())
+	m.claude.polls++
+	var mesh tea.Cmd
+	if m.claude.polls%meshEvery == 1 {
+		mesh = m.meshCmd()
+	}
+	return tea.Batch(next, decided, m.remember(), mesh)
 }
 
 func (m *Model) selectedSession() string {
@@ -100,11 +119,14 @@ func (m *Model) decide() tea.Cmd {
 		}
 	}
 	m.misses = 0
-	next := m.rows[0]
+	next, found := m.firstCandidate()
 	if at := indexOf(m.rows, m.resume); at >= 0 {
-		next = m.rows[at]
+		next, found = m.rows[at], true
 	}
 	m.resume = ""
+	if !found {
+		return nil
+	}
 	m.shown = next.Session
 	return m.showCmd(next, false)
 }
@@ -122,8 +144,10 @@ func (m *Model) hold(kind string) tea.Cmd {
 	return m.holdCmd(kind)
 }
 
-func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
+func (m *Model) handleTerminalKey(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
+	case "esc", "left", "b":
+		return m.goMode(modeClaude)
 	case "up", "k":
 		m.move(-1)
 	case "down", "j":
@@ -164,7 +188,7 @@ func (m *Model) choose(index int) tea.Cmd {
 	return m.showCmd(m.rows[index], true)
 }
 
-func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
+func (m *Model) handleTerminalMouse(msg tea.MouseMsg) tea.Cmd {
 	switch {
 	case msg.Button == tea.MouseButtonWheelUp:
 		m.scroll(-wheelStep)
@@ -186,6 +210,9 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 func (m *Model) clickButton(x int) tea.Cmd {
 	for _, button := range m.buttons() {
 		if x >= button.from && x < button.to {
+			if button.action == actionBack {
+				return m.goMode(modeClaude)
+			}
 			return m.actCmd(button.action)
 		}
 	}

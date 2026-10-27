@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Test stub for iw: one phy "phy0" when STUB_IW_PHY=1; it supports magic-packet wake when
+# STUB_IW_CAP=1 and has it enabled when STUB_IW_ON=1; every call is logged.
+[[ -n ${STUB_LOG:-} ]] && printf 'iw %s\n' "$*" >>"$STUB_LOG"
+case $* in
+  phy) [[ ${STUB_IW_PHY:-0} == 1 ]] && printf 'Wiphy phy0\n' ;;
+  "phy phy0 info") [[ ${STUB_IW_CAP:-0} == 1 ]] && printf '\tWoWLAN support:\n\t\t * wake up on magic packet\n' ;;
+  "phy phy0 wowlan show")
+    if [[ ${STUB_IW_ON:-0} == 1 ]]; then printf 'WoWLAN is enabled:\n * wake up on magic packet\n'; else printf 'WoWLAN is disabled.\n'; fi
+    ;;
+esac
+exit 0

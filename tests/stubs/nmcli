@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Test stub for nmcli: profiles from the file STUB_NMCLI_CONS ("uuid:type" lines), the current
+# active connections from STUB_NMCLI_ACTIVE (default: the same file), the wake-on-wlan value from STUB_NMCLI_WOWLAN (default "default"); every call is logged.
+[[ -n ${STUB_LOG:-} ]] && printf 'nmcli %s\n' "$*" >>"$STUB_LOG"
+case $* in
+  "-t -f UUID,TYPE connection show") cat "${STUB_NMCLI_CONS:-/dev/null}" ;;
+  "-t -f UUID,TYPE connection show --active") cat "${STUB_NMCLI_ACTIVE:-${STUB_NMCLI_CONS:-/dev/null}}" ;;
+  "-g "*) printf '%s\n' "${STUB_NMCLI_WOWLAN:-default}" ;;
+esac
+exit 0

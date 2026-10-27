@@ -27,13 +27,29 @@ const (
 	defaultHeight = 30
 )
 
-// Source is what the sidebar needs from dm.
-type Source interface {
+// Reader reads the machine, the whole mesh (the machines a session can move to) and the
+// project folders.
+type Reader interface {
 	FeedHost(ctx context.Context, host string) (feed.Snapshot, error)
+	Feed(ctx context.Context) (feed.Snapshot, error)
+	Projects(ctx context.Context, host string) ([]string, error)
+}
+
+// Pane drives the right pane of the machine window and the buttons of the list.
+type Pane interface {
 	Shown(ctx context.Context, host string) (string, error)
 	Show(ctx context.Context, target source.PaneTarget) error
 	Hold(ctx context.Context, host, kind string) error
 	Act(ctx context.Context, host, action string) error
+}
+
+// Source is what the sidebar needs from dm. The Claude actions run "dm _cstop",
+// "_cresume", "_cnew" and "_cmove".
+type Source interface {
+	Reader
+	Pane
+	source.ClaudeActor
+	source.PowerActor
 }
 
 // Memory keeps the last reading of a machine between runs, so a new list draws it at once
@@ -90,6 +106,9 @@ type Model struct {
 	resume  string // the terminal shown before the machine went offline
 	misses  int
 	err     string
+
+	claude claudeState
+	power  powerState
 }
 
 type tickMsg struct{}
@@ -111,6 +130,7 @@ func New(opts Options) *Model {
 		mem:    opts.Memory,
 		width:  defaultWidth,
 		height: defaultHeight,
+		claude: newClaudeState(),
 	}
 	if m.mem == nil {
 		return m
@@ -129,9 +149,9 @@ func New(opts Options) *Model {
 func (m *Model) Init() tea.Cmd {
 	m.polling = true
 	if at := indexOf(m.rows, m.shown); m.online && at >= 0 {
-		return m.showThenPollCmd(m.rows[at])
+		return tea.Batch(m.showThenPollCmd(m.rows[at]), m.meshCmd())
 	}
-	return m.pollCmd()
+	return tea.Batch(m.pollCmd(), m.meshCmd())
 }
 
 // showThenPollCmd shows a terminal, then reads the machine. A failed show needs no report:
