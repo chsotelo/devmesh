@@ -67,11 +67,21 @@ Forwarding between devices stays open on the hub: the filter is on each machine.
 | Where | Port | Why |
 |---|---|---|
 | Mesh, Linux machine | 22/tcp | sshd (listens on the devmesh IP and on `127.0.0.1`) |
+| Trusted LAN, Linux machine | 22/tcp, 60000-61000/udp | only while the machine is on a LAN its owner trusted (`sudo devmesh-node lan trust`: subnet **and** router MAC, `DM_LAN_TRUST`). Then sshd also binds the LAN address and the chain `DEVMESH-LAN` accepts that subnet on that interface only. On any other network (a cafe using the same range has another router) sshd is not bound to the LAN at all and `DEVMESH-LAN` drops these ports outside the mesh and localhost. `devmesh-lan.timer` re-checks every minute |
 | Mesh, Linux machine | 60000-61000/udp | mosh (path A) |
 | Mesh, Linux machine | ping | diagnosis |
 | Mesh, Linux machine | `DM_MESH_OPEN` | only what the owner opens with `sudo devmesh-node mesh open` |
 | Mesh, any other port | n/a | dropped by the chain `DEVMESH-IN` on the machine (installed by `PostUp` of the WireGuard interface), so a service on `0.0.0.0` is not reachable by other devices or by the hub |
 | macOS, Android/Termux | n/a | no mesh firewall (no `pf` / no root); macOS sshd listens on `127.0.0.1` only |
+
+Path L (same LAN) changes where the connection goes, not what it trusts: the client only uses
+an address the machine itself reported over path A/B while on a trusted LAN, private and
+without leading zeros, with the same pinned host key (`HostKeyAlias`,
+`StrictHostKeyChecking`). A stale address or a different host fails and `dm` falls back to the
+hub. Fail-closed: the guarantee is sshd's bind, not only the firewall, so a flushed iptables
+does not expose sshd on an untrusted network. Up to one minute after leaving a trusted LAN
+for a network with the same subnet and the same address, sshd may still be bound there
+(pubkey only) until the timer runs.
 
 Traffic with no encryption of its own that crosses the mesh is decrypted at the hub (star
 topology), so root on the hub can read it. SSH and `dm port` (inside SSH) are not readable.

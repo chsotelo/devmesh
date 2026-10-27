@@ -82,6 +82,128 @@ DEVMESH-IN -j DROP" ]
   [ "$status" -eq 0 ]
 }
 
+lan_rules() { grep '^DEVMESH-LAN ' "$STUB_IPT"; }
+lan_state() { mkdir -p "$NODE_RUN" && printf '%s\n' "$1" >"$NODE_RUN/lan"; }
+
+@test "node-fw lan: off a trusted LAN, nothing outside the mesh reaches ssh/mosh" {
+  export NODE_RUN=$BATS_TEST_TMPDIR/run
+  fw lan
+  lan_state ""
+  fw lan
+  [ "$(lan_rules)" = "DEVMESH-LAN -i lo -j RETURN
+DEVMESH-LAN -i devmesh -j RETURN
+DEVMESH-LAN -j DROP" ]
+  [ "$(grep -c '^INPUT .*DEVMESH-LAN' "$STUB_IPT")" -eq 2 ]
+  grep -qxF "INPUT -p tcp --dport 22 -j DEVMESH-LAN" "$STUB_IPT"
+  grep -qxF "INPUT -p udp --dport 60000:61000 -j DEVMESH-LAN" "$STUB_IPT"
+}
+
+@test "node-fw lan: on a trusted LAN, only that subnet on that interface" {
+  export NODE_RUN=$BATS_TEST_TMPDIR/run
+  lan_state "192.168.18.26 192.168.18.0/24 wlp1s0"
+  fw lan
+  [ "$(lan_rules)" = "DEVMESH-LAN -i lo -j RETURN
+DEVMESH-LAN -i devmesh -j RETURN
+DEVMESH-LAN -i wlp1s0 -s 192.168.18.0/24 -j ACCEPT
+DEVMESH-LAN -j DROP" ]
+}
+
+@test "node-fw lan: a public or malformed state aborts without touching iptables" {
+  export NODE_RUN=$BATS_TEST_TMPDIR/run
+  for bad in "8.8.8.8 8.8.8.0/24 eth0" "192.168.1.2 192.168.0.0/8 eth0" "10.0.0.2 010.0.0.0/8 eth0" \
+    "192.168.1.2 192.168.1.0/24 et;h0"; do
+    lan_state "$bad"
+    : >"$STUB_LOG"
+    run fw lan
+    [ "$status" -ne 0 ]
+    ! grep -q iptables "$STUB_LOG"
+  done
+}
+
+@test "node-fw lan: survives the mesh going down" {
+  export NODE_RUN=$BATS_TEST_TMPDIR/run
+  fw lan
+  fw up devmesh
+  fw down devmesh
+  [ "$(lan_rules | wc -l)" -eq 3 ]
+  grep -qxF "INPUT -p tcp --dport 22 -j DEVMESH-LAN" "$STUB_IPT"
+}
+
+@test "node-fw lan: the mesh interface comes from node.conf" {
+  printf 'DM_WG_IFACE=wgmesh\n' >"$NODE_ETC/node.conf"
+  fw lan
+  lan_rules | grep -qxF "DEVMESH-LAN -i wgmesh -j RETURN"
+  printf 'DM_WG_IFACE=bad;name\n' >"$NODE_ETC/node.conf"
+  run fw lan
+  [ "$status" -ne 0 ]
+}
+
+# net_stub MAC — an "ip" stub: default route via 192.168.18.1 on wlp1s0, router MAC given.
+net_stub() {
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  cat >"$BATS_TEST_TMPDIR/bin/ip" <<EOF
+#!/usr/bin/env bash
+case "\$*" in
+  "-4 route show default") echo "default via 192.168.18.1 dev wlp1s0 proto dhcp metric 600" ;;
+  "-4 -o route show dev wlp1s0 scope link") echo "192.168.18.0/24 proto kernel scope link src 192.168.18.26" ;;
+  "-4 -o route get 192.168.18.1") echo "192.168.18.1 dev wlp1s0 src 192.168.18.26 uid 0" ;;
+  "-4 neigh show 192.168.18.1 dev wlp1s0") echo "192.168.18.1 lladdr $1 REACHABLE" ;;
+esac
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/bin/ip"
+  export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+}
+
+lan_node() {
+  export DEVMESH_ALLOW_NONROOT=1 NODE_RUN=$BATS_TEST_TMPDIR/run NODE_SHARE=$BATS_TEST_TMPDIR/noshare
+  # shellcheck source=/dev/null
+  source "$REPO/client/sbin/devmesh-node"
+  node_load
+}
+
+@test "lan: trust records subnet and router MAC, applies it, and is idempotent" {
+  net_stub AA:BB:CC:DD:EE:01
+  lan_node
+  node_lan trust
+  node_lan trust
+  grep -qxF 'DM_LAN_TRUST="192.168.18.0/24@aa:bb:cc:dd:ee:01"' "$NODE_ETC/node.conf"
+  [ "$(cat "$NODE_RUN/lan")" = "192.168.18.26 192.168.18.0/24 wlp1s0" ]
+  lan_rules | grep -qxF "DEVMESH-LAN -i wlp1s0 -s 192.168.18.0/24 -j ACCEPT"
+}
+
+@test "lan: the same subnet behind another router (a cafe) is not trusted" {
+  net_stub aa:bb:cc:dd:ee:01
+  lan_node
+  node_lan trust
+  net_stub 11:22:33:44:55:66
+  node_lan apply
+  [ -z "$(cat "$NODE_RUN/lan")" ]
+  ! lan_rules | grep -q ACCEPT
+  run node_lan status
+  [[ $output == *"direct now: no"* ]]
+}
+
+@test "lan: forget drops every LAN and closes path L" {
+  net_stub aa:bb:cc:dd:ee:01
+  lan_node
+  node_lan trust
+  node_lan forget
+  ! grep -q DM_LAN_TRUST "$NODE_ETC/node.conf"
+  [ -z "$(cat "$NODE_RUN/lan")" ]
+  [ "$(lan_rules | wc -l)" -eq 3 ]
+}
+
+@test "lan: trust, forget and apply need root; status does not" {
+  net_stub aa:bb:cc:dd:ee:01
+  run env -u DEVMESH_ALLOW_NONROOT NODE_ETC="$NODE_ETC" NODE_RUN="$BATS_TEST_TMPDIR/run" \
+    bash "$REPO/client/sbin/devmesh-node" lan trust
+  [ "$status" -ne 0 ]
+  [[ $output == *"needs root"* ]]
+  run env -u DEVMESH_ALLOW_NONROOT NODE_ETC="$NODE_ETC" NODE_RUN="$BATS_TEST_TMPDIR/run" \
+    bash "$REPO/client/sbin/devmesh-node" lan status
+  [ "$status" -eq 0 ]
+}
+
 @test "node-fw: refuses a bad interface name and unknown actions" {
   run fw up 'x;rm'
   [ "$status" -eq 2 ]
@@ -127,9 +249,10 @@ install_env() {
   install_env
   linux_install_client
   ! grep -q 'iptables -N DEVMESH-IN' "$STUB_LOG"
+  grep -q 'iptables -N DEVMESH-LAN' "$STUB_LOG"
   STUB_WG_UP=1 linux_install_client
   grep -q 'iptables -N DEVMESH-IN' "$STUB_LOG"
-  [ "$(grep -c '^INPUT ' "$STUB_IPT")" -eq 1 ]
+  [ "$(grep -c '^INPUT .*DEVMESH-IN' "$STUB_IPT")" -eq 1 ]
 }
 
 @test "install: without iptables it warns, changes nothing and does not fail" {

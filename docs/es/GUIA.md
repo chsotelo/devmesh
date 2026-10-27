@@ -15,8 +15,10 @@ devmesh conecta tus máquinas de desarrollo, tu Mac, tu tablet y tu celular en u
 | **Control** | Un equipo desde el que manejas las máquinas | Tu Mac |
 | **Móvil** | Tablet o celular Android con Termux | Tu tablet, tu celular |
 
-Cada dispositivo tiene dos caminos para llegar a las máquinas:
-- **Camino A (VPN WireGuard):** el más rápido.
+Cada dispositivo tiene hasta tres caminos para llegar a las máquinas:
+- **Camino L (misma red local):** directo, sin pasar por el hub. Solo en las redes que marcaste
+  como de confianza en esa máquina (ver "Directo en tu red local").
+- **Camino A (VPN WireGuard):** pasa por el hub.
 - **Camino B (túnel por el hub):** se usa solo si la VPN no está disponible.
 
 No tienes que elegir: `dm` usa el que funcione.
@@ -273,6 +275,25 @@ devmesh-node mesh status                    # o simplemente: dm mesh
 
 `dm mesh` no pide root: muestra qué está abierto e imprime el comando `sudo` exacto para
 cambiarlo. Las máquinas que se unieron antes reciben el firewall con `dm update`.
+
+### Directo en tu red local
+
+Si tu Mac, tu tablet y una máquina están en la misma red (tu casa, tu oficina), `dm` se conecta
+directo a la máquina, sin dar la vuelta por el hub: la latencia pasa de la del VPS a la de tu
+WiFi. Se activa por red, en cada máquina, estando conectada a esa red (requiere root):
+
+```bash
+sudo devmesh-node lan trust       # confía en la red en la que está ahora (subred + router)
+sudo devmesh-node lan forget      # deja de confiar en todas
+devmesh-node lan status           # ¿está directo ahora?
+```
+
+La red se reconoce por su subred **y** por su router: una cafetería con la misma subred tiene
+otro router y no cuenta. Fuera de tus redes de confianza, SSH ni siquiera escucha en la red
+local (en un WiFi público, nadie la ve). La llave de host es la misma que por el hub, así que si
+la dirección cambió o es otra máquina, la conexión se rechaza y `dm` usa el hub. Los
+dispositivos aprenden la dirección solos, desde la máquina, y la vuelven a preguntar cada 30
+minutos; la máquina revisa en qué red está cada minuto.
 
 Para servidores web y bases de datos usa mejor `dm port`: va dentro de SSH, así que no se abre
 nada y nada cruza la malla sin cifrar. El hub no puede leer tus sesiones SSH, pero sí cualquier

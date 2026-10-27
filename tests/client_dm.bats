@@ -33,6 +33,112 @@ setup() {
   [ "$status" -ne 0 ]
 }
 
+# lan_route near|far — route/ip stubs: is the machine's LAN address directly attached?
+lan_route() {
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  if [[ $1 == near ]]; then
+    printf '#!/bin/sh\necho "  interface: en0"\n' >"$BATS_TEST_TMPDIR/bin/route"
+    printf '#!/bin/sh\necho "192.168.18.26 dev wlan0 src 192.168.18.32"\n' >"$BATS_TEST_TMPDIR/bin/ip"
+  else
+    printf '#!/bin/sh\necho "    gateway: 192.168.1.1"\n' >"$BATS_TEST_TMPDIR/bin/route"
+    printf '#!/bin/sh\necho "192.168.18.26 via 192.168.1.1 dev wlan0"\n' >"$BATS_TEST_TMPDIR/bin/ip"
+  fi
+  chmod +x "$BATS_TEST_TMPDIR/bin/route" "$BATS_TEST_TMPDIR/bin/ip"
+  export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+}
+
+@test "path L: a machine on this LAN is reached directly, with a short timeout" {
+  printf '192.168.18.26\n' >"$DM_CACHE/lan-lap"
+  lan_route near
+  [ "$(dm_path lap)" = lap-l ]
+  grep -q 'ssh -o ConnectTimeout=1 .* lap-l true' "$STUB_LOG"
+}
+
+@test "path L: another network falls through to path A without trying the LAN" {
+  printf '192.168.18.26\n' >"$DM_CACHE/lan-lap"
+  lan_route far
+  [ "$(dm_path lap)" = lap ]
+  ! grep -q 'lap-l' "$STUB_LOG"
+}
+
+@test "path L: a failed LAN try backs off, forgets the address and uses path A" {
+  printf '192.168.18.26\n' >"$DM_CACHE/lan-lap"
+  lan_route near
+  STUB_SSH_DOWN=lap-l run dm_path lap
+  [ "$output" = lap ]
+  [ -e "$DM_CACHE/lan-off-lap" ]
+  : >"$STUB_LOG"
+  [ "$(dm_path lap)" = lap ]
+  ! grep -q 'lap-l' "$STUB_LOG"
+}
+
+# lan_answer TEXT — what a machine answers to DM_LAN_ASK (the shared ssh stub keys replies by
+# file name, and this command has slashes): a wrapper in front of it.
+lan_answer() {
+  mkdir -p "$BATS_TEST_TMPDIR/sshw"
+  printf '%s' "$1" >"$BATS_TEST_TMPDIR/lan-answer"
+  cat >"$BATS_TEST_TMPDIR/sshw/ssh" <<EOF
+#!/usr/bin/env bash
+if [[ "\$*" == *"/run/devmesh/lan"* ]]; then
+  printf 'ssh %s\n' "\$*" >>"\$STUB_LOG"
+  cat "$BATS_TEST_TMPDIR/lan-answer"
+  exit 0
+fi
+exec "$REPO/tests/stubs/ssh" "\$@"
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/sshw/ssh"
+  export PATH="$BATS_TEST_TMPDIR/sshw:$PATH"
+}
+
+@test "path L: the machine's LAN address is learned once and becomes an ssh alias" {
+  lan_answer $'192.168.18.26 192.168.18.0/24 wlp1s0\n'
+  dm_lan_learn lap lap
+  [ "$(cat "$DM_CACHE/lan-lap")" = 192.168.18.26 ]
+  cfg=$HOME/.ssh/config.d/devmesh-lan
+  grep -qxF 'Host lap-l' "$cfg"
+  grep -qxF '  HostName 192.168.18.26' "$cfg"
+  grep -qxF '  User dev' "$cfg"
+  grep -qxF '  HostKeyAlias lap' "$cfg"
+  grep -qxF '  StrictHostKeyChecking yes' "$cfg"
+  grep -qxF '  UserKnownHostsFile ~/.ssh/devmesh_known_hosts' "$cfg"
+  [ "$(head -n1 "$HOME/.ssh/config")" = "Include config.d/devmesh-lan" ]
+  : >"$STUB_LOG"
+  dm_lan_learn lap lap
+  ! grep -q '/run/devmesh/lan' "$STUB_LOG"
+}
+
+@test "path L: a machine off its trusted LANs gives no address" {
+  lan_answer ''
+  dm_lan_learn lap lap
+  [ "$(cat "$DM_CACHE/lan-lap")" = - ]
+  ! grep -q 'Host lap-l' "$HOME/.ssh/config.d/devmesh-lan"
+}
+
+@test "path L: public, mesh, octal-looking or malformed answers are never used" {
+  export DM_IP=10.73.0.4
+  dm_lan_valid 192.168.18.26
+  dm_lan_valid 10.1.2.3
+  dm_lan_valid 172.16.0.1
+  dm_lan_valid 172.31.255.254
+  ! dm_lan_valid 172.32.0.1
+  ! dm_lan_valid 8.8.8.8
+  ! dm_lan_valid 10.73.0.2
+  ! dm_lan_valid 192.168.1.300
+  ! dm_lan_valid 010.1.2.3
+  ! dm_lan_valid 192.168.01.2
+  ! dm_lan_valid '192.168.1.1 -oProxyCommand=x'
+  lan_answer $'203.0.113.7 203.0.113.0/24 eth0\n'
+  dm_lan_learn lap lap
+  [ "$(cat "$DM_CACHE/lan-lap")" = - ]
+}
+
+@test "path L: no alias over a device that is really named <machine>-l" {
+  printf 'lap-l\tphone\t10.73.0.9\t-\t-\t-\t-\t-\n' >>"$DM_CACHE/hosts.tsv"
+  lan_answer $'192.168.18.26 192.168.18.0/24 wlp1s0\n'
+  dm_lan_learn lap lap
+  ! grep -q 'Host lap-l' "$HOME/.ssh/config.d/devmesh-lan"
+}
+
 @test "terminal list: machine color, global id, agent state, offline machines" {
   t=$'\t'
   ssh_reply lap "dm _who" "redi${t}1${t}redi:claude${t}1${t}claude${t}waiting${t}tablet${t}1700000000${t}$(date +%s)${t}tablet,local"$'\n'
