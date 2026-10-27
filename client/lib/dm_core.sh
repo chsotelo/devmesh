@@ -417,7 +417,8 @@ dm_run() {
     dm_local "$@"
     return
   fi
-  alias=$(dm_path "$host") || return 255
+  # The path probes are ssh calls too: they must not eat the stdin meant for the command.
+  alias=$(dm_path "$host" </dev/null) || return 255
   # shellcheck disable=SC2029 # arguments are meant to run on the remote side
   # DM_RUN_PREFIX (optional, e.g. "timeout 30"): a caller's wrapper for the ssh process.
   ${DM_RUN_PREFIX[@]+"${DM_RUN_PREFIX[@]}"} ssh "${DM_SSH_PROBE[@]}" "$alias" "$@"
