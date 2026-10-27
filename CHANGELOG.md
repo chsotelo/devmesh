@@ -7,6 +7,14 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-10-27
+
+### Fixed
+
+- Moving a Claude session failed with "Could not complete the action": the path probe in
+  `dm_run` (ssh ... true) read the transcript meant for the remote import, so the destination
+  got an empty stream.
+
 ## [0.11.0] - 2026-10-27
 
 ### Added

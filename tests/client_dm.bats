@@ -33,6 +33,19 @@ setup() {
   [ "$status" -ne 0 ]
 }
 
+@test "dm_run: the path probe never eats the stdin meant for the remote command" {
+  ssh() {
+    # Real ssh forwards stdin to the remote side, even for the "true" probes.
+    if [[ $* == *_claude_import* ]]; then
+      cat >"$BATS_TEST_TMPDIR/got"
+    else
+      cat >/dev/null
+    fi
+  }
+  dm_run lap dm _claude_import x y <<<'{"a":1}'
+  [ "$(cat "$BATS_TEST_TMPDIR/got")" = '{"a":1}' ]
+}
+
 # lan_route near|far — route/ip stubs: is the machine's LAN address directly attached?
 lan_route() {
   mkdir -p "$BATS_TEST_TMPDIR/bin"
