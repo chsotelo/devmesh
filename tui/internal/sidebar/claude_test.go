@@ -281,7 +281,7 @@ func TestStatusBarMoveGoesStraightToTheOnlyTargetAndActsOnTheOpenSession(t *test
 
 	send(m, keyHeaderMove)
 
-	if got := strings.Join(src.calls, ";"); got != "move lap "+idWorking+" desk;show desk fresh " {
+	if got := strings.Join(src.calls, ";"); got != "move lap "+idWorking+" desk;show desk fresh  focus" {
 		t.Fatalf("calls = %q", got)
 	}
 }
@@ -315,7 +315,7 @@ func TestKeyboardStopAndMoveStillActOnTheSelectedRow(t *testing.T) {
 
 	send(m, "m")
 
-	if got := strings.Join(src.calls, ";"); got != "move lap "+idIdle+" desk;show desk fresh " {
+	if got := strings.Join(src.calls, ";"); got != "move lap "+idIdle+" desk;show desk fresh  focus" {
 		t.Fatalf("calls = %q", got)
 	}
 }
@@ -354,7 +354,7 @@ func TestMoveListMarksTheBestMachineAndRefusesTheOnesThatCannotReceive(t *testin
 		t.Fatalf("calls=%v view:\n%s", src.calls, m.View())
 	}
 	tapText(t, m, "small")
-	if got := strings.Join(src.calls, ";"); got != "move lap "+idWorking+" small;show small fresh " {
+	if got := strings.Join(src.calls, ";"); got != "move lap "+idWorking+" small;show small fresh  focus" {
 		t.Fatalf("calls = %q", got)
 	}
 	if m.claude.mode != modeClaude {
@@ -399,7 +399,7 @@ func TestHistoryIsSearchableAndOffersResumeHereOrElsewhere(t *testing.T) {
 
 	tapText(t, m, "[Resume on desk]")
 
-	if got := strings.Join(src.calls, ";"); got != "move lap "+idPastTwo+" desk;show desk fresh " {
+	if got := strings.Join(src.calls, ";"); got != "move lap "+idPastTwo+" desk;show desk fresh  focus" {
 		t.Fatalf("calls = %q", got)
 	}
 }

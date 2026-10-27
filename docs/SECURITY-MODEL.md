@@ -100,8 +100,10 @@ Use `dm port` for web servers and databases instead of opening them.
 - **Moving a session** copies its transcript from one machine to another through the
   controller. The destination trusts what the source sends as conversation history, so a
   compromised source machine could hand a forged history to the agent on the destination.
-  The copy is capped in size, must look like JSON lines, never overwrites an existing
-  session, and is refused when the project has uncommitted changes or the commits differ.
+  The copy is capped in size, must look like JSON lines, never replaces a running session or
+  a copy whose history it does not start with byte for byte (a stale copy left by an earlier
+  move is replaced), and is refused when the project has uncommitted changes or the commits
+  differ. After the move the source deletes its copy of that transcript.
   Move only between machines you trust equally.
 - **Power:** Linux nodes get `/etc/polkit-1/rules.d/50-devmesh-power.rules`, which lets the
   enrolled user (validated name) suspend and power off without a password; that is what a

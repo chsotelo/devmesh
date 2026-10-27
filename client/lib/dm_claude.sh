@@ -241,6 +241,29 @@ dm_claude_transcript() {
 }
 
 # "<cwd><TAB><name>" of a transcript (name may be empty).
+# dm_claude_local_cwd FILE CWD: the session's folder on this machine. A moved transcript names
+# the other machine's folder until the session writes here; its project is the path under
+# this machine's projects folder whose encoding is the transcript's directory.
+dm_claude_local_cwd() {
+  local file=$1 cwd=$2 dir rel cand
+  dir=${file%/*}
+  dir=${dir##*/}
+  if [[ -d $cwd && ${cwd//[^A-Za-z0-9]/-} == "$dir" ]]; then
+    printf '%s\n' "$cwd"
+    return 0
+  fi
+  rel=${cwd#/}
+  while [[ $rel == */* ]]; do
+    rel=${rel#*/}
+    cand=$DM_PROJECTS_DIR/$rel
+    if [[ ${cand//[^A-Za-z0-9]/-} == "$dir" && -d $cand ]]; then
+      printf '%s\n' "$cand"
+      return 0
+    fi
+  done
+  printf '%s\n' "$cwd"
+}
+
 dm_claude_session_meta() {
   dm_claude_scan "0 $1" "" 1 | awk -F'\t' 'NR == 1 {print $4 "\t" $5}'
 }
@@ -331,7 +354,7 @@ dm_claude_resume() {
   file=$(dm_claude_transcript "$sid") || dm_die "no transcript for that session"
   meta=$(dm_claude_session_meta "$file")
   name=${meta#*$'\t'}
-  [[ -n $cwd ]] || cwd=${meta%%$'\t'*}
+  [[ -n $cwd ]] || cwd=$(dm_claude_local_cwd "$file" "${meta%%$'\t'*}")
   [[ $cwd == /* && $cwd == "$(dm_claude_clean "$cwd")" && -d $cwd ]] || dm_die "the session folder does not exist"
   dm_claude_launch "$name" "$cwd" "$(dm_claude_q "$bin") --resume $sid"
 }
@@ -371,7 +394,7 @@ dm_claude_info() {
   dm_claude_valid_sid "$sid" || dm_die "invalid session id"
   file=$(dm_claude_transcript "$sid") || dm_die "no transcript for that session"
   meta=$(dm_claude_session_meta "$file")
-  cwd=${meta%%$'\t'*}
+  cwd=$(dm_claude_local_cwd "$file" "${meta%%$'\t'*}")
   [[ -z $(dm_claude_live_pid "$sid") ]] || live=1
   [[ -d $cwd ]] && exists=1
   printf '%s\t%s\t%s\t%s\t%s\n' "$cwd" "$live" "$DM_PROJECTS_DIR" "$exists" \
@@ -399,6 +422,18 @@ dm_claude_probe() {
 }
 
 # _claude_export SESSION_ID: the transcript on stdout.
+# _claude_forget SESSION_ID: after a move, this machine's copy of the transcript goes (never
+# while the session runs here), so the session lives in one place and can come back.
+dm_claude_forget() {
+  local sid=${1:-} f
+  dm_claude_valid_sid "$sid" || dm_die "invalid session id"
+  [[ -z $(dm_claude_live_pid "$sid") ]] || dm_die "the session is running"
+  for f in "$HOME"/.claude/projects/*/"$sid.jsonl"; do
+    [[ -f $f ]] && rm -f -- "$f"
+  done
+  return 0
+}
+
 dm_claude_export() {
   local file
   dm_claude_valid_sid "${1:-}" || dm_die "invalid session id"
@@ -409,13 +444,14 @@ dm_claude_export() {
 # _claude_import SESSION_ID REL: store the transcript on stdin under the encoded cwd of
 # $DM_PROJECTS_DIR/REL; prints that cwd.
 dm_claude_import() {
-  local sid=${1:-} rel=${2:-} cwd dest tmp raw
+  local sid=${1:-} rel=${2:-} cwd dest tmp raw old
   dm_claude_valid_sid "$sid" || dm_die "invalid session id"
   dm_claude_valid_rel "$rel" || dm_die "invalid project"
   cwd=$DM_PROJECTS_DIR/$rel
   [[ -d $cwd ]] || dm_die "no such project"
   dest=$HOME/.claude/projects/${cwd//[^A-Za-z0-9]/-}
-  ! dm_claude_sid_taken "$sid" || dm_die "that session already exists here"
+  [[ -z $(dm_claude_live_pid "$sid") ]] || dm_die "that session already exists here"
+  old=$(dm_claude_transcript "$sid") || old=""
   mkdir -p "$dest"
   tmp=$(mktemp "$dest/.import.XXXXXX")
   raw=$(mktemp "$dest/.import.XXXXXX")
@@ -439,6 +475,15 @@ dm_claude_import() {
     rm -f "$tmp"
     dm_die "empty transcript"
   }
+  # A copy left here by an earlier move (the session went away and comes back) is replaced
+  # only when the incoming history starts with it byte for byte; any other one is kept.
+  if [[ -n $old ]]; then
+    if ! head -c "$(wc -c <"$old")" "$tmp" | cmp -s - "$old"; then
+      rm -f "$tmp"
+      dm_die "that session already exists here"
+    fi
+    rm -f -- "$old"
+  fi
   # mv -n never replaces; the source file still existing afterwards means someone got there first.
   mv -n "$tmp" "$dest/$sid.jsonl"
   if [[ -e $tmp ]]; then
@@ -589,5 +634,7 @@ dm_claude_cmove() {
   [[ $live != 1 ]] || dm_claude_cstop "$src" "$sid"
   dcwd=$(dm_claude_transfer "$src" "$dst" "$sid" "$rel") || dm_die "$M_CLAUDE_FAILED"
   out=$(dm_run "$dst" dm _claude_resume "$sid" "$dcwd" 2>/dev/null) || dm_die "$M_CLAUDE_FAILED"
+  # The move is done; a source that cannot forget (older devmesh) only keeps a stale copy.
+  dm_run "$src" dm _claude_forget "$sid" >/dev/null 2>&1 || true
   dm_claude_session_out "$out"
 }

@@ -263,14 +263,16 @@ func (m *Model) runClaude(work func(ctx context.Context) (string, error), done c
 	}
 	m.claude.busy = true
 	m.claude.note = m.cat.Text(i18n.KeyClWait)
-	host, src := m.host, m.src
+	src := m.src
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), claudeBudget)
 		defer cancel()
 		session, err := work(ctx)
 		if err == nil && session != "" {
 			done.open = session
-			err = src.Show(ctx, source.PaneTarget{Host: done.to, Session: session, Focus: done.to == host})
+			// Focus even on another machine: the session is followed to its window, where
+			// Claude may first ask whether to trust the folder.
+			err = src.Show(ctx, source.PaneTarget{Host: done.to, Session: session, Focus: true})
 		}
 		done.err = err
 		return done

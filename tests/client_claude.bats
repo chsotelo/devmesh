@@ -397,7 +397,7 @@ transcript() {
   [ "$status" -ne 0 ]
 }
 
-@test "_claude_import: an existing session id is refused and never overwritten" {
+@test "_claude_import: an existing session id with another history is refused and never overwritten" {
   mkdir -p "$DM_PROJECTS_DIR/deep"
   printf '{"a":1}\n' | dm_claude_import "$SID2" deep >/dev/null
   local f
@@ -406,6 +406,45 @@ transcript() {
   [ "$status" -ne 0 ]
   [ "$(cat "$f")" = '{"a":1}' ]
   [ -z "$(find "$(dirname "$f")" -name '.import.*')" ]
+}
+
+@test "_claude_import: a stale copy left by an earlier move is replaced by the longer history" {
+  mkdir -p "$DM_PROJECTS_DIR/deep"
+  printf '{"a":1}\n' | dm_claude_import "$SID2" deep >/dev/null
+  run dm_claude_import "$SID2" deep <<<$'{"a":1}\n{"b":2}'
+  [ "$status" -eq 0 ]
+  [ "$(cat "$(dm_claude_transcript "$SID2")")" = $'{"a":1}\n{"b":2}' ]
+  [ "$(find "$HOME/.claude/projects" -name "$SID2.jsonl" | wc -l | tr -d ' ')" = 1 ]
+}
+
+@test "_claude_import: a session running here is never replaced" {
+  mkdir -p "$DM_PROJECTS_DIR/deep"
+  live_session "$SID1" idle "deep:@1.%1" "$DM_PROJECTS_DIR/deep" 'x'
+  run dm_claude_import "$SID1" deep <<<'{"a":1}'
+  [ "$status" -ne 0 ]
+}
+
+@test "_claude_forget: removes this machine's copy, never one of a running session" {
+  transcript "$SID2" "$DM_PROJECTS_DIR/redi" "t"
+  run dm_claude_forget "$SID2"
+  [ "$status" -eq 0 ]
+  ! dm_claude_transcript "$SID2"
+  live_session "$SID1" idle "redi:@1.%1" "$DM_PROJECTS_DIR/redi" 'x'
+  transcript "$SID1" "$DM_PROJECTS_DIR/redi" "t"
+  run dm_claude_forget "$SID1"
+  [ "$status" -ne 0 ]
+  dm_claude_transcript "$SID1"
+}
+
+@test "_claude_info and _claude_resume: a moved transcript uses this machine's project folder" {
+  mkdir -p "$DM_PROJECTS_DIR/app"
+  # Written by the other machine: its cwd, stored here under this machine's folder.
+  printf '{"type":"user","cwd":"/home/other/code/app"}\n' |
+    dm_claude_import "$SID2" app >/dev/null
+  run dm_claude_info "$SID2"
+  [ "$status" -eq 0 ]
+  [ "$(cut -f1 <<<"$output")" = "$DM_PROJECTS_DIR/app" ]
+  [ "$(cut -f4 <<<"$output")" = 1 ]
 }
 
 @test "_claude_import: only JSON object lines are kept, a non-JSON start is refused" {
@@ -531,6 +570,10 @@ move_replies() {
   import=$(grep -n "pc2 dm _claude_import" "$STUB_LOG" | head -1 | cut -d: -f1)
   resume=$(grep -n "pc2 dm _claude_resume" "$STUB_LOG" | head -1 | cut -d: -f1)
   [ "$stop" -lt "$export" ] && [ "$export" -lt "$import" ] && [ "$import" -lt "$resume" ]
+  # A move, not a copy: the source forgets its transcript once the destination runs it.
+  local forget
+  forget=$(grep -n "lap dm _claude_forget $SID1" "$STUB_LOG" | head -1 | cut -d: -f1)
+  [ -n "$forget" ] && [ "$resume" -lt "$forget" ]
 }
 
 @test "_cmove: a stopped session is not stopped again; folders that are not git repos are fine" {

@@ -7,6 +7,19 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.3] - 2026-10-27
+
+### Fixed
+
+- A Claude session can move back and forth: a move removes the source's copy of the
+  transcript, and a stale copy left by an earlier move is replaced when the incoming history
+  starts with it byte for byte (any other copy is still refused).
+- A moved session that had not written on its new machine yet kept the other machine's folder:
+  it could not be resumed or moved again ("outside the projects folder"). Its folder is now
+  the project under this machine's projects folder that the transcript is stored for.
+- After a move the workspace follows the session to the other machine's window, so Claude's
+  "trust this folder?" question (whose default exits) is seen and answered.
+
 ## [0.11.2] - 2026-10-27
 
 ### Changed

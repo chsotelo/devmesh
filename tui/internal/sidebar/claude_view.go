@@ -17,7 +17,6 @@ const (
 	resetCode    = "\x1b[0m"
 	hollowDot    = "○"
 	backGlyph    = "‹ "
-	pickerArrow  = " ▾"
 	indent       = 2
 	footerMargin = 1
 	footerGap    = 2
