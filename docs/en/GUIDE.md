@@ -245,8 +245,9 @@ install.
 - **Stop:** select a session and tap `Stop`. It ends and frees its memory, and stays in
   `History ›`. When sessions have been idle for over 1 h, one line offers to stop them all.
 - **On their own after 2 h:** sessions running in devmesh that sit idle for 2 h stop by
-  themselves, checked every 5 minutes (`DM_CLAUDE_AUTOSTOP_MIN=0` turns it off). Sessions
-  started elsewhere, such as a VS Code terminal, are never touched.
+  themselves, checked every 5 minutes (`DM_CLAUDE_AUTOSTOP_MIN=0` turns it off). Their terminal
+  stays open, asleep, showing the session; Enter resumes it right there with the whole
+  conversation. Sessions not running inside tmux are never touched.
 - **History ›:** named, stopped sessions from the last 30 days, with a search box.
   `Resume` reopens one where it left off, with the whole conversation.
 - **＋ New:** a name (prefilled with the date, `27Oct - `) and a project folder; it starts

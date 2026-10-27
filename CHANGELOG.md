@@ -7,6 +7,16 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.4] - 2026-10-27
+
+### Changed
+
+- A Claude session stopped after 2 h idle no longer leaves a bare shell prompt: its terminal
+  stays, asleep, showing the session name, and Enter resumes it right there (same folder,
+  whole conversation); afterwards the terminal is a normal shell. Only a pane that is back
+  at its shell is replaced. If the session was resumed or moved elsewhere meanwhile, Enter
+  only says so.
+
 ## [0.11.3] - 2026-10-27
 
 ### Fixed

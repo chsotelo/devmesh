@@ -160,6 +160,8 @@ M_CLAUDE_DIRTY='Hay cambios sin commit en %s: haz commit y push, y en %s haz pul
 M_CLAUDE_HEAD_DIFF='El código de %s no está al día con %s: haz commit y push, y en %s haz pull.'
 M_CLAUDE_EXISTS='Ya existe una sesión con ese id en %s.'
 M_CLAUDE_TOO_BIG='Transcripción demasiado grande para mover (más de 256 MiB).'
+M_CLAUDE_ASLEEP='Dormida tras un tiempo sin uso. Presiona Enter para retomarla aquí.'
+M_CLAUDE_AWAY='Esta sesión ya no está aquí: se retomó o se movió. Ahora es una terminal normal.'
 
 # Claude sessions panel (dm-tui).
 M_CL_WORKING='trabajando'

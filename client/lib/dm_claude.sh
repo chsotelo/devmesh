@@ -317,6 +317,45 @@ dm_claude_still_idle() {
   return 1
 }
 
+# dm_claude_put_to_sleep SID TMUX_TARGET: after an auto-stop the terminal stays, asleep (see
+# _claude_sleep). Only a pane that is back at its shell is replaced, never a running program.
+dm_claude_put_to_sleep() {
+  local sid=$1 pane=${2##*.} cmd="" i
+  [[ $pane =~ ^%[0-9]+$ && -n ${DM_SELF:-} ]] || return 0
+  # Claude may take a moment to leave the pane after the signal.
+  for ((i = 0; i < ${DM_CLAUDE_SLEEP_WAIT:-15}; i++)); do
+    cmd=$(tmux display-message -p -t "$pane" '#{pane_current_command}' 2>/dev/null) || return 0
+    case $cmd in bash | zsh | sh | fish | dash | ksh | -bash | -zsh) break ;; esac
+    cmd=""
+    sleep 0.2
+  done
+  [[ -n $cmd ]] || return 0
+  tmux respawn-pane -k -t "$pane" "$(dm_claude_q "$BASH") $(dm_claude_q "$DM_SELF") _claude_sleep $sid" 2>/dev/null || true
+}
+
+# _claude_sleep SESSION_ID: the terminal of a session stopped for idling. Enter resumes it
+# here, in its folder; afterwards the terminal goes on as a normal shell.
+dm_claude_sleep() {
+  local sid=${1:-} file meta cwd name bin
+  dm_claude_valid_sid "$sid" || dm_die "invalid session id"
+  if file=$(dm_claude_transcript "$sid"); then
+    meta=$(dm_claude_session_meta "$file")
+    name=$(dm_claude_clean "${meta#*$'\t'}")
+    cwd=$(dm_claude_local_cwd "$file" "${meta%%$'\t'*}")
+    printf '\n  \342\230\276  %s\n\n  %s\n' "${name:-$sid}" "$M_CLAUDE_ASLEEP"
+    read -r _ || true
+  fi
+  # Resumed or moved elsewhere meanwhile: never a second copy of the same session.
+  if [[ -n ${file:-} && -z $(dm_claude_live_pid "$sid") ]] && dm_claude_transcript "$sid" >/dev/null &&
+    bin=$(dm_claude_bin); then
+    cd "$cwd" 2>/dev/null || cd "$HOME" || true
+    "$bin" --resume "$sid" || true
+  else
+    printf '%s\n' "$M_CLAUDE_AWAY"
+  fi
+  exec "${SHELL:-/bin/sh}" -l
+}
+
 # _claude_reap: stop the live sessions that sat idle for DM_CLAUDE_AUTOSTOP_MIN minutes
 # (default 120, 0 = off). Only sessions inside tmux: one started elsewhere (a VS Code
 # terminal) is never touched. They stay resumable. Safe to run often and concurrently.
@@ -339,6 +378,7 @@ dm_claude_reap() {
       dm_claude_still_idle "$sid" "$((mins * 60))" || continue
       if (dm_claude_stop "$sid") 2>/dev/null; then
         printf 'devmesh: stopped idle Claude session %s (idle %s min, %s)\n' "$sid" "$((idle / 60))" "$target" >&2
+        dm_claude_put_to_sleep "$sid" "$target"
       fi
     done < <(dm_claude_live "$rows")
   fi
