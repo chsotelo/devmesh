@@ -155,7 +155,7 @@ refresh_env() {
   grep -qF '"org.freedesktop.login1.power-off"' "$rule"
   ! grep -q 'multiple-sessions' "$rule"
   [ "$(grep -c 'login1' "$rule")" -eq 2 ]
-  [ "$(stat -f %Lp "$rule" 2>/dev/null || stat -c %a "$rule")" = 644 ]
+  [ "$(stat -c %a "$rule" 2>/dev/null || stat -f %Lp "$rule")" = 644 ]
   cp "$rule" "$BATS_TEST_TMPDIR/rule.before"
   run linux_power_refresh
   [[ $output != *polkit* ]]
