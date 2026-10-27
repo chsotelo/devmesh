@@ -107,6 +107,7 @@ setup() {
 refresh_env() {
   export DM_DIST_DIR="$REPO/client" BS_SSHD_DIR="$BATS_TEST_TMPDIR/sshd" BS_ETC="$NODE_ETC"
   export BS_RUN=$BATS_TEST_TMPDIR/run
+  export BS_POLKIT_DIR=$BATS_TEST_TMPDIR/polkit/rules.d
   mkdir -p "$BS_RUN"
   printf '192.168.18.26 192.168.18.0/24 wlp1s0\n' >"$BS_RUN/lan"
   unset DM_IP
@@ -142,6 +143,93 @@ refresh_env() {
   [[ $output == *"kept the previous one"* ]]
   cmp "$BS_SSHD_DIR/sshd_config.d/10-devmesh.conf" "$BATS_TEST_TMPDIR/before"
   ! grep -q 'systemctl restart' "$STUB_LOG"
+}
+
+@test "power: update writes a polkit rule for the enrolled user only, once" {
+  refresh_env 0
+  mkdir -p "$BS_POLKIT_DIR"
+  linux_sshd_refresh
+  rule=$BS_POLKIT_DIR/50-devmesh-power.rules
+  grep -qF 'subject.user == "dev"' "$rule"
+  grep -qF '"org.freedesktop.login1.suspend"' "$rule"
+  grep -qF '"org.freedesktop.login1.power-off"' "$rule"
+  ! grep -q 'multiple-sessions' "$rule"
+  [ "$(grep -c 'login1' "$rule")" -eq 2 ]
+  [ "$(stat -f %Lp "$rule" 2>/dev/null || stat -c %a "$rule")" = 644 ]
+  cp "$rule" "$BATS_TEST_TMPDIR/rule.before"
+  run linux_power_refresh
+  [[ $output != *polkit* ]]
+  cmp "$rule" "$BATS_TEST_TMPDIR/rule.before"
+}
+
+@test "power: no polkit on the machine, nothing is written" {
+  refresh_env 0
+  linux_sshd_refresh
+  [ ! -e "$BS_POLKIT_DIR/50-devmesh-power.rules" ]
+}
+
+@test "power: an invalid user name never reaches the rule" {
+  refresh_env 0
+  mkdir -p "$BS_POLKIT_DIR"
+  printf 'Match User dev"; evil()\n' >"$BS_SSHD_DIR/sshd_config.d/10-devmesh.conf"
+  linux_power_refresh
+  [ ! -e "$BS_POLKIT_DIR/50-devmesh-power.rules" ]
+  linux_polkit 'a b'
+  linux_polkit 'Root'
+  [ ! -e "$BS_POLKIT_DIR/50-devmesh-power.rules" ]
+}
+
+@test "power: only the active WiFi connection gets magic wake-on-wlan, other profiles are left alone" {
+  refresh_env 0
+  u1=11111111-1111-4111-8111-111111111111
+  u2=22222222-2222-4222-8222-222222222222
+  printf '%s:802-11-wireless\n%s:802-3-ethernet\n' "$u1" "$u2" >"$BATS_TEST_TMPDIR/cons"
+  u3=33333333-3333-4333-8333-333333333333
+  printf '%s:802-11-wireless\n%s:802-3-ethernet\n%s:802-11-wireless\n' "$u1" "$u2" "$u3" >"$BATS_TEST_TMPDIR/cons"
+  printf '%s:802-11-wireless\n%s:802-3-ethernet\n' "$u1" "$u2" >"$BATS_TEST_TMPDIR/active"
+  export STUB_NMCLI_CONS=$BATS_TEST_TMPDIR/cons STUB_NMCLI_ACTIVE=$BATS_TEST_TMPDIR/active STUB_IW_PHY=1 STUB_IW_CAP=1 STUB_IW_ON=0
+  linux_power_refresh
+  grep -qxF "nmcli connection modify uuid $u1 802-11-wireless.wake-on-wlan magic" "$STUB_LOG"
+  ! grep -q "modify uuid $u2" "$STUB_LOG"
+  ! grep -q "modify uuid $u3" "$STUB_LOG"
+  grep -qxF "iw phy phy0 wowlan enable magic-packet" "$STUB_LOG"
+}
+
+@test "power: off a trusted LAN nothing is armed" {
+  refresh_env 0
+  u1=11111111-1111-4111-8111-111111111111
+  printf '%s:802-11-wireless\n' "$u1" >"$BATS_TEST_TMPDIR/cons"
+  export STUB_NMCLI_CONS=$BATS_TEST_TMPDIR/cons STUB_IW_PHY=1 STUB_IW_CAP=1 STUB_IW_ON=0
+  rm -f "$BS_RUN/lan"
+  linux_power_refresh
+  ! grep -q 'connection modify' "$STUB_LOG"
+  ! grep -q 'wowlan enable' "$STUB_LOG"
+  printf 'garbage x y\n' >"$BS_RUN/lan"
+  linux_power_refresh
+  ! grep -q 'connection modify' "$STUB_LOG"
+  ! grep -q 'wowlan enable' "$STUB_LOG"
+}
+
+@test "power: a profile that already has magic is not modified again" {
+  refresh_env 0
+  u1=11111111-1111-4111-8111-111111111111
+  printf '%s:802-11-wireless\n' "$u1" >"$BATS_TEST_TMPDIR/cons"
+  export STUB_NMCLI_CONS=$BATS_TEST_TMPDIR/cons STUB_IW_PHY=1 STUB_IW_CAP=1 STUB_IW_ON=1 STUB_NMCLI_WOWLAN=magic
+  linux_power_refresh
+  ! grep -q 'connection modify' "$STUB_LOG"
+  ! grep -q 'wowlan enable' "$STUB_LOG"
+}
+
+@test "power: no WiFi card or no magic-packet support, nothing is touched" {
+  refresh_env 0
+  u1=11111111-1111-4111-8111-111111111111
+  printf '%s:802-11-wireless\n' "$u1" >"$BATS_TEST_TMPDIR/cons"
+  export STUB_NMCLI_CONS=$BATS_TEST_TMPDIR/cons STUB_IW_PHY=0
+  linux_power_refresh
+  ! grep -q 'connection modify' "$STUB_LOG"
+  export STUB_IW_PHY=1 STUB_IW_CAP=0
+  linux_power_refresh
+  ! grep -q 'wowlan enable' "$STUB_LOG"
 }
 
 @test "bootstrap: sshd drop-in listens on devmesh IP + localhost and resets Match" {
@@ -335,10 +423,34 @@ refresh_env() {
 
 @test "macOS: client install succeeds whether or not ~/.bashrc exists (set -e)" {
   export DM_DIST_DIR="$REPO/client" HOME="$BATS_TEST_TMPDIR/mh3" MX_SHARE="$BATS_TEST_TMPDIR/mh3/share" MX_BIN="$BATS_TEST_TMPDIR/mh3/bin" DM_VERSION=0.1.0
-  mkdir -p "$HOME"
-  run bash -c "set -euo pipefail; source '$REPO/client/lib/bootstrap_macos.sh'; macos_install_client"
+  mkdir -p "$HOME" "$BATS_TEST_TMPDIR/stub"
+  printf '#!/bin/sh\necho "$@" >>"%s/launchctl.log"\n' "$BATS_TEST_TMPDIR" >"$BATS_TEST_TMPDIR/stub/launchctl"
+  chmod +x "$BATS_TEST_TMPDIR/stub/launchctl"
+  PATH="$BATS_TEST_TMPDIR/stub:$PATH" run bash -c "set -euo pipefail; source '$REPO/client/lib/bootstrap_macos.sh'; macos_install_client"
   [ "$status" -eq 0 ]
   grep -q 'devmesh.sh' "$HOME/.zshrc"
   [ ! -e "$HOME/.bashrc" ]
+  # The idle-session reaper agent: every 5 minutes, loaded on install/update.
+  p="$HOME/Library/LaunchAgents/net.devmesh.claude-reap.plist"
+  grep -q '<integer>300</integer>' "$p"
+  grep -q '<string>_claude_reap</string>' "$p"
+  grep -q 'net.devmesh.claude-reap' "$BATS_TEST_TMPDIR/launchctl.log"
+  if [[ $(uname -s) == Darwin ]]; then plutil -lint "$p"; fi
   [ -x "$MX_BIN/dm" ]
+}
+
+@test "Linux: the idle-session reaper is a user timer every 5 minutes, enabled for all users on update" {
+  u="$REPO/client/systemd-user"
+  grep -q '^ExecStart=/usr/local/bin/dm _claude_reap$' "$u/devmesh-claude-reap.service"
+  grep -q '^OnUnitActiveSec=5min$' "$u/devmesh-claude-reap.timer"
+  grep -q '^WantedBy=timers.target$' "$u/devmesh-claude-reap.timer"
+  run grep -c 'linux_enable_reap' "$REPO/client/lib/bootstrap_linux.sh"
+  [ "$output" -ge 3 ]
+  mkdir -p "$BATS_TEST_TMPDIR/lstub"
+  printf '#!/bin/sh\necho "$@" >>"%s/sc.log"\n' "$BATS_TEST_TMPDIR" >"$BATS_TEST_TMPDIR/lstub/systemctl"
+  printf '#!/bin/sh\n' >"$BATS_TEST_TMPDIR/lstub/loginctl"
+  chmod +x "$BATS_TEST_TMPDIR/lstub/"*
+  PATH="$BATS_TEST_TMPDIR/lstub:$PATH" run bash -c "source '$REPO/client/lib/bootstrap_linux.sh'; linux_enable_reap"
+  [ "$status" -eq 0 ]
+  grep -qx -- '--global enable devmesh-claude-reap.timer' "$BATS_TEST_TMPDIR/sc.log"
 }

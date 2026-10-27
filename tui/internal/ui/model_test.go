@@ -20,8 +20,18 @@ func TestEscOnHomeWithoutFilterQuits(t *testing.T) {
 	}
 }
 
-func TestEscClearsTheFilterBeforeQuitting(t *testing.T) {
-	m, _ := newTestModel(t, 70, 40, true)
+func TestEscOnTerminalsGoesBackToTheSessions(t *testing.T) {
+	m, _ := newTerminalsModel(t, 70, 40, true)
+
+	msgs := drain(t, m, press(m, "esc"))
+
+	if wasQuit(msgs) || m.top().screen != screenHome {
+		t.Fatalf("esc on the terminals goes back (msgs=%v route=%+v)", msgs, m.top())
+	}
+}
+
+func TestEscClearsTheFilterBeforeLeavingTheTerminals(t *testing.T) {
+	m, _ := newTerminalsModel(t, 70, 40, true)
 	press(m, "/")
 	typeText(m, "api")
 
@@ -33,13 +43,13 @@ func TestEscClearsTheFilterBeforeQuitting(t *testing.T) {
 	if m.filter.Value() != "" || m.filterOn {
 		t.Fatalf("filter not cleared: %q on=%v", m.filter.Value(), m.filterOn)
 	}
-	if second := drain(t, m, press(m, "esc")); !wasQuit(second) {
-		t.Fatal("the second esc quits")
+	if second := drain(t, m, press(m, "esc")); wasQuit(second) || m.top().screen != screenHome {
+		t.Fatalf("the second esc leaves the terminals (route=%+v)", m.top())
 	}
 }
 
 func TestLetterQTypesIntoTheFilterInsteadOfQuitting(t *testing.T) {
-	m, _ := newTestModel(t, 70, 40, true)
+	m, _ := newTerminalsModel(t, 70, 40, true)
 	press(m, "/")
 
 	msgs := drain(t, m, press(m, "q"))
@@ -50,7 +60,7 @@ func TestLetterQTypesIntoTheFilterInsteadOfQuitting(t *testing.T) {
 }
 
 func TestCtrlCQuitsFromAnywhere(t *testing.T) {
-	m, _ := newTestModel(t, 70, 40, true)
+	m, _ := newTerminalsModel(t, 70, 40, true)
 	press(m, "a")
 	typeText(m, "typing")
 
@@ -62,7 +72,7 @@ func TestCtrlCQuitsFromAnywhere(t *testing.T) {
 }
 
 func TestQuitKeyQuitsFromTheGrid(t *testing.T) {
-	m, _ := newTestModel(t, 70, 40, true)
+	m, _ := newTerminalsModel(t, 70, 40, true)
 
 	if !wasQuit(drain(t, m, press(m, "q"))) {
 		t.Fatal("q must quit")
@@ -70,7 +80,7 @@ func TestQuitKeyQuitsFromTheGrid(t *testing.T) {
 }
 
 func TestArrowsWalkTheGridByGeometry(t *testing.T) {
-	m, _ := newTestModel(t, 70, 50, true)
+	m, _ := newTerminalsModel(t, 70, 50, true)
 	if m.selected != "t:laptop/api/1" {
 		t.Fatalf("the first terminal starts selected, got %q", m.selected)
 	}
@@ -94,7 +104,7 @@ func TestArrowsWalkTheGridByGeometry(t *testing.T) {
 }
 
 func TestEnterOnAMachineOpensItsMenuAndEscGoesBack(t *testing.T) {
-	m, _ := newTestModel(t, 70, 50, true)
+	m, _ := newTerminalsModel(t, 70, 50, true)
 	press(m, "up")
 	if m.selected != machineKey("laptop") {
 		t.Fatalf("up from the first card -> %q", m.selected)
@@ -112,13 +122,13 @@ func TestEnterOnAMachineOpensItsMenuAndEscGoesBack(t *testing.T) {
 	}
 
 	press(m, "esc")
-	if m.top().screen != screenHome {
+	if m.top().screen != screenTerminals {
 		t.Fatalf("esc must go back to home, on %+v", m.top())
 	}
 }
 
 func TestEnterOnAnOfflineMachineAsksDmToWakeIt(t *testing.T) {
-	m, _ := newTestModel(t, 70, 50, true)
+	m, _ := newTerminalsModel(t, 70, 50, true)
 	m.selected = machineKey("desktop")
 
 	cmd := press(m, "enter")
@@ -126,13 +136,13 @@ func TestEnterOnAnOfflineMachineAsksDmToWakeIt(t *testing.T) {
 	if cmd == nil || m.lastIntent.verb != verbActivate {
 		t.Fatalf("cmd=%v intent=%+v", cmd, m.lastIntent)
 	}
-	if m.top().screen != screenHome {
+	if m.top().screen != screenTerminals {
 		t.Fatal("waking must not leave the home screen")
 	}
 }
 
 func TestEnterOnANarrowScreenOpensTheDetailAndOKeyOpensTheTerminal(t *testing.T) {
-	m, fake := newTestModel(t, 45, 30, true)
+	m, fake := newTerminalsModel(t, 45, 30, true)
 
 	press(m, "enter")
 	if got := m.top(); got.screen != screenDetail || got.arg != "laptop/api/1" {
@@ -155,7 +165,7 @@ func TestEnterOnANarrowScreenOpensTheDetailAndOKeyOpensTheTerminal(t *testing.T)
 }
 
 func TestEnterOnAWideScreenOpensTheTerminalDirectly(t *testing.T) {
-	m, fake := newTestModel(t, 160, 45, true)
+	m, fake := newTerminalsModel(t, 160, 45, true)
 
 	drain(t, m, press(m, "enter"))
 
@@ -168,7 +178,7 @@ func TestEnterOnAWideScreenOpensTheTerminalDirectly(t *testing.T) {
 }
 
 func TestOutsideTmuxOpeningRunsTheFullScreenCommand(t *testing.T) {
-	m, fake := newTestModel(t, 160, 45, false)
+	m, fake := newTerminalsModel(t, 160, 45, false)
 
 	cmd := press(m, "enter")
 
@@ -181,7 +191,7 @@ func TestOutsideTmuxOpeningRunsTheFullScreenCommand(t *testing.T) {
 }
 
 func TestDetailClosesWhenItsTerminalDisappears(t *testing.T) {
-	m, fake := newTestModel(t, 45, 30, true)
+	m, fake := newTerminalsModel(t, 45, 30, true)
 	press(m, "enter")
 	gone := sampleSnapshot()
 	gone.Machines[0].Terminals = gone.Machines[0].Terminals[1:]
@@ -189,13 +199,13 @@ func TestDetailClosesWhenItsTerminalDisappears(t *testing.T) {
 
 	m.Update(feedMsg{seq: m.feedSeq, snap: gone})
 
-	if m.top().screen != screenHome {
+	if m.top().screen != screenTerminals {
 		t.Fatalf("route = %+v", m.top())
 	}
 }
 
 func TestStaleFeedReadingsAreDropped(t *testing.T) {
-	m, fake := newTestModel(t, 70, 40, true)
+	m, fake := newTerminalsModel(t, 70, 40, true)
 	m.feedSeq = 5
 	empty := feed.Snapshot{Device: "ghost"}
 
@@ -215,7 +225,7 @@ func TestStaleFeedReadingsAreDropped(t *testing.T) {
 }
 
 func TestForcedRefreshInvalidatesTheReadingInFlight(t *testing.T) {
-	m, _ := newTestModel(t, 70, 40, true)
+	m, _ := newTerminalsModel(t, 70, 40, true)
 	m.fetchFeed()
 	stale := m.feedSeq
 
@@ -228,7 +238,7 @@ func TestForcedRefreshInvalidatesTheReadingInFlight(t *testing.T) {
 }
 
 func TestFeedTickDoesNotStackRequests(t *testing.T) {
-	m, _ := newTestModel(t, 70, 40, true)
+	m, _ := newTerminalsModel(t, 70, 40, true)
 	before := m.feedSeq
 
 	m.feedBusy = true
@@ -244,7 +254,7 @@ func TestFeedTickDoesNotStackRequests(t *testing.T) {
 }
 
 func TestStaleScreenReadingsAreDropped(t *testing.T) {
-	m, _ := newTestModel(t, 70, 40, true)
+	m, _ := newTerminalsModel(t, 70, 40, true)
 	m.inflight["laptop/api/1"] = 7
 
 	m.applyShot(shotMsg{key: "laptop/api/1", id: 6, lines: []string{"old"}})
@@ -261,7 +271,7 @@ func TestStaleScreenReadingsAreDropped(t *testing.T) {
 }
 
 func TestOnlyVisibleCardsAreCaptured(t *testing.T) {
-	m, fake := newTestModel(t, 45, 30, true)
+	m, fake := newTerminalsModel(t, 45, 30, true)
 	fake.snapshot = manyTerminals(12)
 	m.Update(feedMsg{seq: m.feedSeq, snap: fake.snapshot})
 	m.shots = map[string]shot{}
@@ -275,7 +285,7 @@ func TestOnlyVisibleCardsAreCaptured(t *testing.T) {
 }
 
 func TestFreshScreensAreNotCapturedAgainRightAway(t *testing.T) {
-	m, _ := newTestModel(t, 45, 30, true)
+	m, _ := newTerminalsModel(t, 45, 30, true)
 	m.inflight = map[string]int{}
 
 	m.refreshShots()
@@ -286,7 +296,7 @@ func TestFreshScreensAreNotCapturedAgainRightAway(t *testing.T) {
 }
 
 func TestWheelScrollsTheCardsAndTheFeedSelectionSurvives(t *testing.T) {
-	m, fake := newTestModel(t, 45, 20, true)
+	m, fake := newTerminalsModel(t, 45, 20, true)
 	fake.snapshot = manyTerminals(8)
 	m.Update(feedMsg{seq: m.feedSeq, snap: fake.snapshot})
 	keep := m.selected
@@ -306,7 +316,7 @@ func TestWheelScrollsTheCardsAndTheFeedSelectionSurvives(t *testing.T) {
 }
 
 func TestKeyboardSelectionScrollsIntoView(t *testing.T) {
-	m, fake := newTestModel(t, 45, 20, true)
+	m, fake := newTerminalsModel(t, 45, 20, true)
 	fake.snapshot = manyTerminals(8)
 	m.Update(feedMsg{seq: m.feedSeq, snap: fake.snapshot})
 
@@ -322,20 +332,20 @@ func TestKeyboardSelectionScrollsIntoView(t *testing.T) {
 }
 
 func TestHelpScreenAnyKeyGoesBack(t *testing.T) {
-	m, _ := newTestModel(t, 70, 40, true)
+	m, _ := newTerminalsModel(t, 70, 40, true)
 
 	press(m, "?")
 	if m.top().screen != screenHelp || !strings.Contains(m.View(), "Open the selected terminal") {
 		t.Fatalf("help not shown:\n%s", m.View())
 	}
 	press(m, "x")
-	if m.top().screen != screenHome {
+	if m.top().screen != screenTerminals {
 		t.Fatal("any key closes the help")
 	}
 }
 
 func TestDevicesScreenShowsTheListAndItsButtons(t *testing.T) {
-	m, _ := newTestModel(t, 70, 40, true)
+	m, _ := newTerminalsModel(t, 70, 40, true)
 
 	cmd := press(m, "d")
 	drain(t, m, cmd)
@@ -352,7 +362,7 @@ func TestDevicesScreenShowsTheListAndItsButtons(t *testing.T) {
 }
 
 func TestRefreshButtonReloadsTheMesh(t *testing.T) {
-	m, fake := newTestModel(t, 70, 40, true)
+	m, fake := newTerminalsModel(t, 70, 40, true)
 
 	msgs := drain(t, m, press(m, "r"))
 
@@ -370,7 +380,7 @@ func TestRefreshButtonReloadsTheMesh(t *testing.T) {
 }
 
 func TestFailedActionsShowInTheStatusLine(t *testing.T) {
-	m, _ := newTestModel(t, 70, 40, true)
+	m, _ := newTerminalsModel(t, 70, 40, true)
 
 	m.Update(actionMsg{err: errFeedDown})
 

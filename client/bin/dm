@@ -33,7 +33,7 @@ dm_share_dir() {
   fi
 }
 
-for _lib in dm_core dm_remote dm_terms dm_files dm_admin dm_repoint dm_trust dm_ui dm_app dm_workspace dm_layout dm_watch dm_vscode tui_target dm_feed; do
+for _lib in dm_core dm_remote dm_terms dm_files dm_admin dm_repoint dm_trust dm_ui dm_app dm_workspace dm_layout dm_watch dm_vscode tui_target dm_feed dm_claude dm_power; do
   # shellcheck source=/dev/null
   source "$(dm_share_dir)/lib/$_lib.sh"
 done
@@ -78,6 +78,19 @@ dm_dispatch() {
     _proj) dm_feed_projects "$@" ;;
     _i18n) dm_feed_i18n ;;
     _new) dm_feed_new "$@" ;;
+    _cstop) dm_claude_cstop "$@" ;;
+    _cresume) dm_claude_cresume "$@" ;;
+    _cnew) dm_claude_cnew "$@" ;;
+    _cmove) dm_claude_cmove "$@" ;;
+    _claude) dm_claude ;;
+    _claude_reap) dm_claude_reap ;;
+    _claude_stop) dm_claude_stop "$@" ;;
+    _claude_resume) dm_claude_resume "$@" ;;
+    _claude_new) dm_claude_new "$@" ;;
+    _claude_info) dm_claude_info "$@" ;;
+    _claude_probe) dm_claude_probe "$@" ;;
+    _claude_export) dm_claude_export "$@" ;;
+    _claude_import) dm_claude_import "$@" ;;
     _who) dm_remote_who ;;
     _capture) dm_remote_capture "$@" ;;
     _clients) dm_remote_clients "$@" ;;
@@ -89,6 +102,8 @@ dm_dispatch() {
     _recent) dm_remote_recent ;;
     _dest) dm_remote_dest "$@" ;;
     _wol) dm_remote_wol "$@" ;;
+    _power) dm_power "$@" ;;
+    _power_do) dm_power_do "$@" ;;
     _watch) dm_remote_watch ;;
     _key) dm_remote_key "$@" ;;
     _notify-act) dm_watch_act "$@" ;;

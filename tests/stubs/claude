@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Test stub for claude: only logs the call.
+[[ -n ${STUB_LOG:-} ]] && printf 'claude %s\n' "$*" >>"$STUB_LOG"
+exit 0

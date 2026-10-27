@@ -33,10 +33,20 @@ type Foreground interface {
 	ToolCommand(tool string, args ...string) *exec.Cmd
 }
 
+// ClaudeActor runs the actions on Claude Code sessions. The ones that start a session
+// answer with the tmux session to open ("" when there is nothing to open).
+type ClaudeActor interface {
+	StopClaude(ctx context.Context, host, sessionID string) error
+	ResumeClaude(ctx context.Context, host, sessionID string) (string, error)
+	NewClaude(ctx context.Context, host, name, project string) (string, error)
+	MoveClaude(ctx context.Context, from, sessionID, to string) (string, error)
+}
+
 // Source is everything the panel needs from dm.
 type Source interface {
 	Reader
 	Actor
+	ClaudeActor
 	Foreground
 }
 

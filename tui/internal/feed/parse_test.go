@@ -141,3 +141,105 @@ func TestTerminalTitleShowsWindowOnlyWhenNotActive(t *testing.T) {
 		t.Fatalf("titles: %q %q %q", active.Title(), other.Title(), other.Key())
 	}
 }
+
+const (
+	sidOne = "0f9c2d4e-1a2b-4c3d-8e9f-aabbccddeeff"
+	sidTwo = "11111111-2222-3333-4444-555555555555"
+)
+
+func TestParseReadsClaudeSessionsHistoryAndAvailability(t *testing.T) {
+	raw := "M\tlaptop\tOK\t33\t10.73.0.2\t-\tmac\n" +
+		"K\tlaptop\t1\n" +
+		"C\tlaptop\t" + sidOne + "\tbusy\t4\tmain:@2.%5\t262\t/home/u/PROJECTS/x\t27Oct - tools\n" +
+		"C\tlaptop\t" + sidTwo + "\tidle\t4621\t-\t19\t/home/u/PROJECTS/y\t23Oct - ebbine bugs\n" +
+		"H\tlaptop\t" + sidOne + "\t3600\t/home/u/PROJECTS/x\t18Oct - form guide\n" +
+		"M\tpc2\tOK\t24\t10.73.0.5\t-\t-\n" +
+		"K\tpc2\t0\n"
+
+	snap := Parse(raw)
+
+	laptop := snap.Machines[0]
+	if !laptop.HasClaude || len(laptop.Claude) != 2 || len(laptop.History) != 1 {
+		t.Fatalf("laptop = %+v", laptop)
+	}
+	live := laptop.Claude[0]
+	if live.Status != ClaudeWorking || live.IdleSecs != 4 || live.RSSMB != 262 || live.Name != "27Oct - tools" ||
+		live.Tmux != "main:@2.%5" || live.TmuxSession() != "main" || !live.Openable() || live.Machine != "laptop" {
+		t.Fatalf("live = %+v", live)
+	}
+	outside := laptop.Claude[1]
+	if outside.Status != ClaudeIdle || outside.Openable() || outside.Tmux != "" {
+		t.Fatalf("outside = %+v", outside)
+	}
+	if past := laptop.History[0]; past.AgeSecs != 3600 || past.Name != "18Oct - form guide" || past.Cwd != "/home/u/PROJECTS/x" {
+		t.Fatalf("history = %+v", past)
+	}
+	if snap.Machines[1].HasClaude {
+		t.Fatal("K 0 means the machine has no Claude")
+	}
+}
+
+func TestParseMapsClaudeStatuses(t *testing.T) {
+	for raw, want := range map[string]ClaudeStatus{
+		"busy": ClaudeWorking, "shell": ClaudeWorking, "working": ClaudeWorking,
+		"waiting": ClaudeWaiting, "idle": ClaudeIdle, "weird": ClaudeIdle,
+	} {
+		if got := parseClaudeStatus(raw); got != want {
+			t.Errorf("%s = %s, want %s", raw, got, want)
+		}
+	}
+}
+
+func TestParseDropsMalformedOrHostileClaudeRecords(t *testing.T) {
+	raw := "M\tlaptop\tOK\t33\t10.73.0.2\t-\tmac\n" +
+		"C\tlaptop\tnot a uuid\tbusy\t4\t-\t1\t/x\tname\n" +
+		"C\tlaptop\t" + sidOne + "\tbusy\t4\t-\t1\t/x\n" +
+		"C\tlaptop\t" + sidOne + "\tbusy\t4\n" +
+		"C\tghost\t" + sidOne + "\tbusy\t4\t-\t1\t/x\tname\n" +
+		"H\tlaptop\t$(rm -rf)\t5\t/x\tname\n" +
+		"H\tlaptop\t" + sidTwo + "\t5\t/x\n" +
+		"K\tghost\t1\n" +
+		"C\tlaptop\t" + sidTwo + "\tbusy\t4\t-\t1\t/x\t\x1b[31mred\x1b[0m\x07 name\n"
+
+	laptop := Parse(raw).Machines[0]
+
+	if len(laptop.History) != 0 {
+		t.Fatalf("history = %+v", laptop.History)
+	}
+	if len(laptop.Claude) != 1 || laptop.Claude[0].Name != "red name" {
+		t.Fatalf("claude = %+v", laptop.Claude)
+	}
+}
+
+func TestParseKeepsTabsInsideAClaudeName(t *testing.T) {
+	raw := "M\tlaptop\tOK\t33\t10.73.0.2\t-\tmac\n" +
+		"C\tlaptop\t" + sidOne + "\tidle\t4\t-\t1\t/x\ta\tb\n"
+
+	if got := Parse(raw).Machines[0].Claude[0].Name; got != "a b" {
+		t.Fatalf("name = %q", got)
+	}
+}
+
+func TestAMachineThatDoesNotReportClaudeIsOutdatedNotWithoutClaude(t *testing.T) {
+	snap := Parse("V\t0.11.0\tmac\n" +
+		"M\tmac\tOK\t22\t10.73.0.2\t-\t-\n" +
+		"M\tlaptop\tOK\t24\t10.73.0.4\thome\tmac\n" +
+		"M\tpc2\tOK\t30\t10.73.0.5\t-\t-\n" +
+		"K\tmac\t1\n" +
+		"K\tpc2\t0\n")
+
+	why := map[string]Why{}
+	for _, target := range MoveTargets(snap.Machines, "mac") {
+		why[target.Machine.Name] = target.Why
+	}
+	if why["laptop"] != WhyOutdated || why["pc2"] != WhyNoClaude {
+		t.Fatalf("why = %v", why)
+	}
+}
+
+func TestCleanDropsC1AndBidiControls(t *testing.T) {
+	raw := "a\u0085b\u009bc\u202Ed\u202Ae\u2066f\u2069g\u200Eh\u200Fi"
+	if got := Clean(raw); got != "abcdefghi" {
+		t.Fatalf("Clean = %q", got)
+	}
+}

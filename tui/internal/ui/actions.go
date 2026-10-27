@@ -25,6 +25,9 @@ func (m *Model) applyIntent(act intent) tea.Cmd {
 	case verbOpenTerminal:
 		return m.openTerminal(act.arg)
 	case verbNew:
+		if m.top().screen == screenHome {
+			return m.startClaudeNew()
+		}
 		return m.startNew("")
 	case verbNewOn:
 		return m.startNew(act.arg)
@@ -62,13 +65,16 @@ func (m *Model) applyIntent(act intent) tea.Cmd {
 	case verbCreate:
 		return m.createTerminal(act.arg, act.extra)
 	}
-	return nil
+	return m.applyClaudeIntent(act)
 }
 
 const mainSession = "main"
 
 // selectCell is a tap on a card: the first tap selects it, tapping the selected one opens it.
 func (m *Model) selectCell(key string) tea.Cmd {
+	if id, isClaude := strings.CutPrefix(key, prefixClaude); isClaude {
+		return m.tapClaude(id)
+	}
 	if key == m.selected {
 		return m.activateSelected()
 	}
@@ -238,29 +244,37 @@ func (m *Model) refreshAll() tea.Cmd {
 
 // goBack is Esc: leave the filter, then the screen, and quit from home.
 func (m *Model) goBack() tea.Cmd {
-	if m.top().screen == screenHome {
-		return m.leaveHome()
+	switch m.top().screen {
+	case screenHome:
+		return m.applyIntent(quitIntent)
+	case screenTerminals:
+		m.leaveFilter()
+		return nil
 	}
 	m.pop()
 	return nil
 }
 
-func (m *Model) leaveHome() tea.Cmd {
+// leaveFilter clears the terminals filter; with none active it goes back to the sessions.
+func (m *Model) leaveFilter() {
 	if m.filterOn || m.filter.Value() != "" {
 		m.filterOn = false
 		m.filter.Blur()
 		m.filter.SetValue("")
 		m.scroll = 0
 		m.resolveSelection()
-		return nil
+		return
 	}
-	return m.applyIntent(quitIntent)
+	m.pop()
 }
 
 // move applies a direction on the screen's list.
 func (m *Model) move(direction string) tea.Cmd {
 	switch m.top().screen {
 	case screenHome:
+		m.moveClaudeSelection(direction)
+		return m.refreshShots()
+	case screenTerminals:
 		m.moveSelection(direction)
 		return m.refreshShots()
 	case screenDevices:
@@ -326,9 +340,17 @@ func (m *Model) submit() tea.Cmd {
 	switch m.top().screen {
 	case screenAdd:
 		return m.submitDevice()
+	case screenHome:
+		return m.activateClaude()
+	case screenSession:
+		return m.openClaude()
+	case screenClaudeNew:
+		return m.submitClaudeNew()
+	case screenPick, screenMove, screenHistory, screenHistoryItem:
+		return m.pickFirst()
 	case screenDetail:
 		return m.openTerminal(m.top().arg)
-	case screenHome:
+	case screenTerminals:
 		m.filterOn = false
 		m.filter.Blur()
 		return nil
@@ -351,4 +373,21 @@ func (m *Model) submitDevice() tea.Cmd {
 	}
 	m.pop()
 	return m.runTool(source.ToolAdd, name)
+}
+
+// submitClaudeNew is Enter on the new session screen: the project under the cursor.
+func (m *Model) submitClaudeNew() tea.Cmd {
+	if len(m.menuItems()) == 0 {
+		m.say(m.cat.Text(i18n.KeyClNoProjects), true)
+		return nil
+	}
+	return m.pickItem(strconv.Itoa(m.cursor))
+}
+
+// pickFirst is Enter on a Claude list: the row under the cursor, when there is one.
+func (m *Model) pickFirst() tea.Cmd {
+	if len(m.menuItems()) == 0 {
+		return nil
+	}
+	return m.pickItem(strconv.Itoa(m.cursor))
 }

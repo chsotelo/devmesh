@@ -51,6 +51,10 @@ func (m *Model) smallFrame() frame {
 func (m *Model) body(width, height int) block {
 	switch m.top().screen {
 	case screenHome:
+		return m.claudeHomeBody(width, height)
+	case screenSession:
+		return m.claudeSessionBody(width, height)
+	case screenTerminals:
 		return m.homeBody(width, height)
 	case screenDetail:
 		return m.detailBody(width, height)
@@ -87,6 +91,10 @@ func (m *Model) inputLines() []string {
 		label, field = m.cat.Text(i18n.KeyGhostNew2), m.input.View()
 	case screenAdd:
 		label, field = m.cat.Text(i18n.KeyGhostAdd), m.input.View()
+	default:
+		if hasTextInput(m.top().screen) {
+			label, field = m.inputLabel(), m.input.View()
+		}
 	}
 	return inputBox(label, field, m.width)
 }

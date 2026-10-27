@@ -65,7 +65,7 @@ setup() {
   [ "$(grep -c '^tm new-window ' "$STUB_LOG")" = 2 ]
   grep -q '^tm new-window -d -P -F #{window_id} -t =devmesh: -n lap ' "$STUB_LOG"
   grep -q '^tm new-window -d -P -F #{window_id} -t =devmesh: -n pc2 ' "$STUB_LOG"
-  grep -q "^tm split-window -d -h -b -l 24 -t %1 -P -F #{pane_id} '/opt/share/bin/dm-tui-x' sidebar --host 'tablet'\$" "$STUB_LOG"
+  grep -q "^tm split-window -d -h -b -l 32 -t %1 -P -F #{pane_id} '/opt/share/bin/dm-tui-x' sidebar --host 'tablet'\$" "$STUB_LOG"
   grep -q "sidebar --host 'lap'" "$STUB_LOG"
   grep -q "sidebar --host 'pc2'" "$STUB_LOG"
   grep -q '^tm set-option -w -t @1 @dm_color 22$' "$STUB_LOG"

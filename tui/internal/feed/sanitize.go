@@ -12,6 +12,15 @@ const (
 	tabRune   = "\t"
 	crRune    = "\r"
 	lfRune    = "\n"
+
+	c1Start          = 0x80
+	c1End            = 0x9F
+	lrmRune          = 0x200E
+	rlmRune          = 0x200F
+	bidiEmbedStart   = 0x202A
+	bidiEmbedEnd     = 0x202E
+	bidiIsolateStart = 0x2066
+	bidiIsolateEnd   = 0x2069
 )
 
 // Clean removes everything a remote machine could use to move the cursor, recolor the
@@ -30,10 +39,28 @@ func Clean(raw string) string {
 }
 
 func isUnsafeRune(r rune) bool {
-	if r == unicode.ReplacementChar {
+	if r == unicode.ReplacementChar || isC1Control(r) || isBidiControl(r) {
 		return true
 	}
 	return unicode.IsControl(r) || unicode.Is(unicode.Cf, r)
+}
+
+// isC1Control: U+0080-U+009F, which some terminals read as escape-sequence introducers.
+func isC1Control(r rune) bool {
+	return r >= c1Start && r <= c1End
+}
+
+// isBidiControl: the marks and overrides that reorder text on screen (spoofing).
+func isBidiControl(r rune) bool {
+	switch {
+	case r == lrmRune || r == rlmRune:
+		return true
+	case r >= bidiEmbedStart && r <= bidiEmbedEnd:
+		return true
+	case r >= bidiIsolateStart && r <= bidiIsolateEnd:
+		return true
+	}
+	return false
 }
 
 // CleanLines cleans multi-line text: tabs become spaces, other controls are dropped.

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Test stub for busctl (logind): Can* answers from STUB_CAN_SUSPEND / STUB_CAN_POWEROFF (default yes).
+[[ -n ${STUB_LOG:-} ]] && printf 'busctl %s\n' "$*" >>"$STUB_LOG"
+case $* in
+  *CanSuspend*) printf 's "%s"\n' "${STUB_CAN_SUSPEND:-yes}" ;;
+  *CanPowerOff*) printf 's "%s"\n' "${STUB_CAN_POWEROFF:-yes}" ;;
+esac
+exit 0

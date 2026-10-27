@@ -28,6 +28,7 @@ if ((gflag)); then
 fi
 [[ $# -eq 0 || $1 == true ]] && exit 0
 key=$(IFS=_ && printf '%s' "$*")
+key=${key//\//%}
 file="${STUB_SSH_DIR:-/nonexistent}/$host/$key"
 [[ -e $file ]] && cat "$file"
 exit 0

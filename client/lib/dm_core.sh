@@ -419,7 +419,8 @@ dm_run() {
   fi
   alias=$(dm_path "$host") || return 255
   # shellcheck disable=SC2029 # arguments are meant to run on the remote side
-  ssh "${DM_SSH_PROBE[@]}" "$alias" "$@"
+  # DM_RUN_PREFIX (optional, e.g. "timeout 30"): a caller's wrapper for the ssh process.
+  ${DM_RUN_PREFIX[@]+"${DM_RUN_PREFIX[@]}"} ssh "${DM_SSH_PROBE[@]}" "$alias" "$@"
 }
 
 # dm_tty HOST REMOTE_CMD — interactive session: mosh on path A when available, else ssh -t.

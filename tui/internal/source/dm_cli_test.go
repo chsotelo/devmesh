@@ -22,6 +22,9 @@ case "$1" in
   _shot) printf '\n\033[31mred\033[0m line\nsecond\n\n\n' ;;
   _proj) printf 'api\nmy app\nx);rm -rf /\n$(id)\ndocs\n' ;;
   devices) printf 'lap machine\ntablet phone\n' ;;
+  _cstop) ;;
+  _power) printf '%s' "$STUB_DM_OUT" ;;
+  _cresume|_cnew|_cmove) printf 'progress\nmy-session\n' ;;
   fail) printf 'error: boom\n' >&2; exit 3 ;;
 esac
 `

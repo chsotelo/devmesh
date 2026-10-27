@@ -33,7 +33,7 @@ func (m *Model) menuItems() []menuItem {
 	case screenNewProject:
 		return m.projectItems()
 	default:
-		return nil
+		return m.claudeItems()
 	}
 }
 
@@ -119,6 +119,9 @@ func menuLines(items []menuItem, cursor, width int) []string {
 
 // menuNotes are the quiet lines under the rows (reading projects, nothing to pick).
 func (m *Model) menuNotes() []string {
+	if isClaudeList(m.top().screen) {
+		return m.claudeNotes()
+	}
 	if m.top().screen != screenNewProject {
 		return nil
 	}
@@ -140,6 +143,8 @@ func (m *Model) menuTitle() string {
 		return theme.MachineDot(machine.Color, machine.IsReachable()) + space + m.top().arg
 	case screenNewProject:
 		return m.cat.Format(i18n.KeyTitleNew2, m.top().arg)
+	case screenPick, screenMove, screenHistory, screenHistoryItem, screenClaudeNew:
+		return m.claudeTitle()
 	default:
 		return m.cat.Text(i18n.KeyTitleNew)
 	}

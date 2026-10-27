@@ -7,6 +7,34 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-27
+
+### Added
+
+- Claude sessions in the workspace sidebar: each machine's sidebar lists its running Claude
+  Code sessions by the name you gave them (`claude --name`), with one word of state
+  (working / waiting / idle time). Selecting one shows it in the right pane. Read from Claude
+  Code's own session registry, so no hooks are needed.
+- Stop, resume, new and move: `Stop` ends a session and frees its memory, and it stays in
+  `History ›` (searchable) to resume where it left off. `＋ New` starts `claude --name` in a
+  project folder. `Move to <machine>` stops a session on one machine and resumes it on
+  another with the full conversation, so the other machine does the work. Moving refuses
+  when the project has uncommitted changes or the other machine's checkout differs.
+- Idle Claude sessions running inside devmesh stop by themselves after 2 hours
+  (`DM_CLAUDE_AUTOSTOP_MIN`, 0 disables), on Linux (user timer) and macOS (LaunchAgent).
+  Sessions started elsewhere, such as a VS Code terminal, are never touched.
+- `⏻` in the sidebar: suspend, power off (Linux, with a second confirmation) and wake.
+  Only offered when the machine can be woken again from here: another online machine must
+  share its trusted LAN and Wake-on-WLAN must be on. A machine never powers itself off.
+  Linux nodes get a polkit rule that lets the enrolled user suspend and power off, and
+  Wake-on-WLAN on the trusted network's WiFi connection.
+
+### Changed
+
+- The workspace sidebar is wider (32 columns) to fit session names.
+- With nothing shown, the workspace never opens a Claude session by itself (it would attach
+  a second, smaller client to a session in use elsewhere and shrink it).
+
 ## [0.10.0] - 2026-10-26
 
 ### Added

@@ -35,6 +35,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.applyAction(msg)
 	case execDoneMsg:
 		return m, m.applyExecDone(msg)
+	case claudeDoneMsg:
+		return m, m.applyClaudeDone(msg)
 	}
 	return m, nil
 }
@@ -67,8 +69,11 @@ func (m *Model) applyFeed(msg feedMsg) tea.Cmd {
 	m.snap, m.loaded, m.feedErr = msg.snap, true, ""
 	m.pruneShots()
 	m.resolveSelection()
+	m.resolveClaude()
 	m.ensureVisible()
+	m.ensureClaudeVisible()
 	m.closeVanishedDetail()
+	m.closeVanishedSession()
 	return m.refreshShots()
 }
 
@@ -172,8 +177,12 @@ func (m *Model) visibleTerminals() []feed.Terminal {
 		if term, found := m.snap.FindTerminal(m.top().arg); found {
 			return []feed.Terminal{term}
 		}
-	case screenHome:
+	case screenTerminals:
 		return m.visibleCards()
+	case screenHome:
+		return m.paneTerminals()
+	case screenSession:
+		return m.paneTerminals()
 	}
 	return nil
 }
@@ -191,4 +200,17 @@ func (m *Model) visibleCards() []feed.Terminal {
 		terms = append(terms, c.term)
 	}
 	return terms
+}
+
+// paneTerminals is the terminal whose screen the session pane shows (none when the pane
+// is not on screen or the session cannot be opened).
+func (m *Model) paneTerminals() []feed.Terminal {
+	if m.top().screen == screenHome && !m.wide() {
+		return nil
+	}
+	session, found := m.selectedSession()
+	if !found || !session.Openable() {
+		return nil
+	}
+	return []feed.Terminal{m.claudeTerminal(session)}
 }
