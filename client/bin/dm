@@ -90,6 +90,7 @@ dm_dispatch() {
     _claude_info) dm_claude_info "$@" ;;
     _claude_probe) dm_claude_probe "$@" ;;
     _claude_export) dm_claude_export "$@" ;;
+    _claude_forget) dm_claude_forget "$@" ;;
     _claude_import) dm_claude_import "$@" ;;
     _who) dm_remote_who ;;
     _capture) dm_remote_capture "$@" ;;

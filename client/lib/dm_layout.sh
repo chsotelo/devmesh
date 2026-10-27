@@ -136,6 +136,8 @@ dm_ly_run() {
 # On a narrow screen the terminal fills the window; the list comes back with the menu button.
 dm_ly_focus_main() {
   local wid=$1 pane=$2
+  # The machine's window comes to the front too (a session moved there is followed).
+  tmux select-window -t "$wid"
   tmux select-pane -t "$pane"
   if dm_ly_is_narrow "$wid" && [[ $(tmux display-message -p -t "$wid" '#{window_zoomed_flag}') != 1 ]]; then
     tmux resize-pane -Z -t "$pane"

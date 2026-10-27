@@ -89,6 +89,7 @@ setup() {
   dm_ly_show lap api 2 focus
   grep -q '^tmux set-option -w -t @1 @dm_shown api$' "$STUB_LOG"
   grep -q "^tmux respawn-pane -k -t %2 '.*' '.*/dm' _ws run 'lap' 'api' '2'\$" "$STUB_LOG"
+  grep -q '^tmux select-window -t @1$' "$STUB_LOG"
   grep -q '^tmux select-pane -t %2$' "$STUB_LOG"
 }
 
