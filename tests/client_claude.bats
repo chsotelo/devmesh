@@ -127,6 +127,15 @@ transcript() {
   [ "$cwd" = "$DM_PROJECTS_DIR/redi" ]
 }
 
+@test "local_cwd: a session last working in a subfolder resumes in the folder it started in" {
+  transcript "$SID2" "$DM_PROJECTS_DIR/redi" "named"
+  mkdir -p "$DM_PROJECTS_DIR/redi/sub"
+  run dm_claude_local_cwd "$TRANSCRIPT" "$DM_PROJECTS_DIR/redi/sub"
+  [ "$output" = "$DM_PROJECTS_DIR/redi" ]
+  run dm_claude_local_cwd "$TRANSCRIPT" "/elsewhere/PROJECTS/redi/sub"
+  [ "$output" = "$DM_PROJECTS_DIR/redi" ]
+}
+
 @test "_claude: at most 60 history records and 300 transcripts stay fast" {
   local i
   for i in $(seq 1 300); do
