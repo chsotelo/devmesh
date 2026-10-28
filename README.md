@@ -99,7 +99,8 @@ selector), the machine's terminals as a list on the left, the real terminal on t
 - Claude sessions: the list shows the machine's Claude Code sessions by name, working or
   idle. Stop one to free its memory, resume it later from `History ›`, start `＋ New`, or
   `Move to` another machine so that machine does the work. Sessions idle for 2 h fall asleep in
-  their terminal (Enter resumes them). `⏻` suspends, powers off or wakes a machine when it
+  their terminal (Enter resumes them); one closed by hand leaves `claude --resume …` typed at
+  the prompt. `⏻` suspends, powers off or wakes a machine when it
   can be woken again.
 - Left list: one row per terminal with a dot for the agent in it (yellow waiting, blue working,
   green idle). Click or `enter` shows it on the right; arrows or `j`/`k` move; it refreshes

@@ -7,6 +7,16 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.6] - 2026-10-28
+
+### Added
+
+- When Claude Code ends in a devmesh terminal (`/exit`, Ctrl+C, stopped), the
+  `claude --resume <id>` line it printed (with its `cd …` when Claude adds one) is typed at the
+  next prompt: Enter resumes, Ctrl+C drops it. zsh and bash, inside tmux. Only a plain path and
+  a session id taken from the screen ever reach the prompt. The same after a session resumed
+  from an asleep terminal ends.
+
 ## [0.11.5] - 2026-10-27
 
 ### Fixed

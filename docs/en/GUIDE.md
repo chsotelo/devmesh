@@ -248,6 +248,9 @@ install.
   themselves, checked every 5 minutes (`DM_CLAUDE_AUTOSTOP_MIN=0` turns it off). Their terminal
   stays open, asleep, showing the session; Enter resumes it right there with the whole
   conversation. Sessions not running inside tmux are never touched.
+- **Closed by hand:** when Claude ends in a devmesh terminal (`/exit`, Ctrl+C), the
+  `claude --resume …` line it prints is already typed at the next prompt: Enter resumes,
+  Ctrl+C drops it.
 - **History ›:** named, stopped sessions from the last 30 days, with a search box.
   `Resume` reopens one where it left off, with the whole conversation.
 - **＋ New:** a name (prefilled with the date, `27Oct - `) and a project folder; it starts
