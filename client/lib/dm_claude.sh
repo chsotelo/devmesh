@@ -240,30 +240,38 @@ dm_claude_transcript() {
   return 1
 }
 
-# "<cwd><TAB><name>" of a transcript (name may be empty).
-# dm_claude_local_cwd FILE CWD: the session's folder on this machine. A moved transcript names
-# the other machine's folder until the session writes here; its project is the path under
-# this machine's projects folder whose encoding is the transcript's directory.
+# dm_claude_up PATH DIR: PATH or its nearest parent folder whose encoding is DIR.
+dm_claude_up() {
+  local p=$1
+  while [[ -n $p ]]; do
+    if [[ ${p//[^A-Za-z0-9]/-} == "$2" && -d $p ]]; then
+      printf '%s\n' "$p"
+      return 0
+    fi
+    p=${p%/*}
+  done
+  return 1
+}
+
+# dm_claude_local_cwd FILE CWD: the folder to resume the session in on this machine. Claude
+# finds a transcript only from the folder whose encoding is the transcript's directory: the
+# one the session started in. CWD is the last folder it worked in, which can be a subfolder
+# of that one; a moved transcript names the other machine's folder until the session writes
+# here, so its project is looked up under this machine's projects folder.
 dm_claude_local_cwd() {
-  local file=$1 cwd=$2 dir rel cand
+  local file=$1 cwd=$2 dir rel
   dir=${file%/*}
   dir=${dir##*/}
-  if [[ -d $cwd && ${cwd//[^A-Za-z0-9]/-} == "$dir" ]]; then
-    printf '%s\n' "$cwd"
-    return 0
-  fi
+  dm_claude_up "$cwd" "$dir" && return 0
   rel=${cwd#/}
   while [[ $rel == */* ]]; do
     rel=${rel#*/}
-    cand=$DM_PROJECTS_DIR/$rel
-    if [[ ${cand//[^A-Za-z0-9]/-} == "$dir" && -d $cand ]]; then
-      printf '%s\n' "$cand"
-      return 0
-    fi
+    dm_claude_up "$DM_PROJECTS_DIR/$rel" "$dir" && return 0
   done
   printf '%s\n' "$cwd"
 }
 
+# "<cwd><TAB><name>" of a transcript (name may be empty).
 dm_claude_session_meta() {
   dm_claude_scan "0 $1" "" 1 | awk -F'\t' 'NR == 1 {print $4 "\t" $5}'
 }

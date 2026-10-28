@@ -7,6 +7,15 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.5] - 2026-10-27
+
+### Fixed
+
+- Resuming a Claude session (Enter on an asleep terminal, or Resume in the panel) opened it in
+  the last subfolder it worked in instead of the folder it started in. Claude then asked to
+  trust that folder and could not find the conversation there ("This conversation is from a
+  different directory"). It now resumes in the folder the session started in.
+
 ## [0.11.4] - 2026-10-27
 
 ### Changed
