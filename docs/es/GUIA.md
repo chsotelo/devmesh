@@ -224,6 +224,9 @@ propio Claude Code mantiene; no hace falta instalar nada.
   solas cada 5 minutos (`DM_CLAUDE_AUTOSTOP_MIN=0` lo desactiva). Su terminal no se cierra: queda
   dormida mostrando la sesión, y Enter la retoma ahí mismo con toda la conversación. Las que no
   corren dentro de tmux nunca se tocan.
+- **Cerradas a mano:** cuando Claude termina en una terminal de devmesh (`/exit`, Ctrl+C), la
+  línea `claude --resume …` que imprime ya queda escrita en el siguiente prompt: Enter la retoma,
+  Ctrl+C la descarta.
 - **Historial ›:** las sesiones detenidas con nombre de los últimos 30 días, con buscador.
   `Reanudar` la abre donde quedó, con toda la conversación.
 - **＋ Nueva:** un nombre (viene con la fecha, `27Oct - `) y una carpeta de proyecto; abre

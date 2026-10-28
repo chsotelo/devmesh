@@ -358,6 +358,8 @@ dm_claude_sleep() {
     bin=$(dm_claude_bin); then
     cd "$cwd" 2>/dev/null || cd "$HOME" || true
     "$bin" --resume "$sid" || true
+    # The shell's first prompt offers "claude --resume" again (client/shell/devmesh.sh).
+    export DEVMESH_LAST_CMD=claude
   else
     printf '%s\n' "$M_CLAUDE_AWAY"
   fi
