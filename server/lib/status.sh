@@ -63,15 +63,25 @@ notify() {
       "$NTFY_URL/$NTFY_TOPIC" >/dev/null || warn "ntfy notification failed"
 }
 
-# State per machine in $DEVMESH_STATE/machines/<name>: "up" | "down <since> <alerted>".
+# State per machine in $DEVMESH_STATE/machines/<name>: "up" | "down <since> <alerted> [<up since>]".
 check_machine() {
-  local name=$1 is_up=$2 file state since alerted now
+  local name=$1 is_up=$2 file state since alerted up_since now
   file="$DEVMESH_STATE/machines/$name"
   now=$(now_epoch)
-  read -r state since alerted 2>/dev/null <"$file" || state=up
+  read -r state since alerted up_since 2>/dev/null <"$file" || state=up
   if ((is_up)); then
-    [[ $state == down && ${alerted:-0} == 1 ]] && notify "$name is back" "$name is reachable again" "green_circle"
-    printf 'up\n' >"$file"
+    if [[ $state != down || ${alerted:-0} != 1 ]]; then
+      printf 'up\n' >"$file"
+      return 0
+    fi
+    # "Back" only once it stays up: a sleeping Mac wakes for seconds every few minutes.
+    up_since=${up_since:-$now}
+    if ((now - up_since >= RECOVER_AFTER)); then
+      notify "$name is back" "$name is reachable again" "green_circle"
+      printf 'up\n' >"$file"
+    else
+      printf 'down %s 1 %s\n' "$since" "$up_since" >"$file"
+    fi
     return 0
   fi
   if [[ $state != down ]]; then
@@ -79,6 +89,8 @@ check_machine() {
   elif [[ $alerted != 1 ]] && ((now - since >= ALERT_GRACE)); then
     notify "$name is down" "$name: no WireGuard handshake and no tunnel for $(((now - since) / 60)) min" "red_circle"
     printf 'down %s 1\n' "$since" >"$file"
+  elif [[ -n $up_since ]]; then
+    printf 'down %s %s\n' "$since" "$alerted" >"$file"
   fi
 }
 

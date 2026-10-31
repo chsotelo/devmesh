@@ -1,12 +1,42 @@
 # shellcheck shell=bash
 # dm notify: when a Claude Code session needs the user (a permission prompt, or idle waiting
-# for an answer), the hub pushes it to the phone through its ntfy. Claude calls "dm _notify"
+# for an answer) and the user is away from that machine, the hub pushes it to the phone
+# through its ntfy. Claude calls "dm _notify"
 # from its Notification hook; "dm notify on|off" adds or removes that hook.
 
-# _notify: Claude's hook JSON on stdin. Never fails, so Claude is never held up by the hub.
+# dm_user_idle: seconds since the user last touched this machine, through its keyboard or
+# mouse (macOS, GNOME) or any tmux client (local terminals and devices attached over ssh).
+# Fails when it cannot tell.
+dm_user_idle() {
+  local best="" s a now
+  now=$(date +%s)
+  case $(dm_platform) in
+    macos) s=$(ioreg -c IOHIDSystem -d 4 2>/dev/null | awk '/HIDIdleTime/ {print int($NF / 1000000000); exit}') ;;
+    linux)
+      s=$(gdbus call --session --dest org.gnome.Mutter.IdleMonitor --object-path /org/gnome/Mutter/IdleMonitor/Core \
+        --method org.gnome.Mutter.IdleMonitor.GetIdletime 2>/dev/null | grep -Eo '[0-9]+' | tail -n 1)
+      s=${s:+$((s / 1000))}
+      ;;
+    *) s="" ;;
+  esac
+  [[ $s =~ ^[0-9]+$ ]] && best=$s
+  while read -r a; do
+    [[ $a =~ ^[0-9]+$ ]] || continue
+    s=$((now > a ? now - a : 0))
+    if [[ -z $best ]] || ((s < best)); then best=$s; fi
+  done < <(tmux list-clients -F '#{client_activity}' 2>/dev/null)
+  [[ -n $best ]] || return 1
+  printf '%s\n' "$best"
+}
+
+# _notify: Claude's hook JSON on stdin. Nothing is sent while the user is at this machine
+# (touched it in the last DM_NOTIFY_AWAY seconds). Never fails, so Claude is never held up.
 dm_notify_hook() {
-  local input kind=wait proj
+  local input kind=wait proj idle
   input=$(head -c 65536)
+  if idle=$(dm_user_idle) && ((idle < ${DM_NOTIFY_AWAY:-120})); then
+    return 0
+  fi
   [[ $input != *permission* ]] || kind=perm
   proj=$(dm_sanitize "$(basename "${CLAUDE_PROJECT_DIR:-$PWD}")")
   ssh -o BatchMode=yes -o ConnectTimeout=5 hub-admin notify claude "${proj:-session}" "$kind" \

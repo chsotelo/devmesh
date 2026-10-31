@@ -343,9 +343,9 @@ Instala la app **ntfy** y suscríbete a:
 - **Tema:** `devmesh`
 - **Usuario:** `devmesh-sub`. La contraseña está en el hub, en `/etc/devmesh/ntfy-subscriber.txt`, y solo root puede leerla.
 
-Te llegará un aviso cuando una máquina se caiga y cuando vuelva. Si al agregar la laptop activaste "vigilar el hub", ese mismo `dm add` te dio un tema de **ntfy.sh**. Suscríbete a él para enterarte si el propio hub se cae.
+Te llegará un aviso cuando una máquina se caiga y cuando vuelva (cuando lleve 5 minutos arriba, así una Mac dormida que despierta unos segundos de vez en cuando no te avisa cada vez). Si al agregar la laptop activaste "vigilar el hub", ese mismo `dm add` te dio un tema de **ntfy.sh**. Suscríbete a él para enterarte si el propio hub se cae.
 
-**Claude te necesita.** En cada máquina donde uses Claude Code, corre una vez `dm notify on`. Cuando una sesión pida permiso, o lleve un minuto esperando tu respuesta, la misma app mostrará "Claude on <máquina>: <proyecto>". Agrega un hook `Notification` a `~/.claude/settings.json`, junto a tus propios hooks; `dm notify off` quita solo ese hook.
+**Claude te necesita.** En cada máquina donde uses Claude Code, corre una vez `dm notify on`. Cuando una sesión pida permiso, o lleve un minuto esperando tu respuesta, y no hayas tocado esa máquina en 2 minutos (teclado, mouse o una terminal conectada desde otro dispositivo), la misma app mostrará "Claude on <máquina>: <proyecto>". Agrega un hook `Notification` a `~/.claude/settings.json`, junto a tus propios hooks; `dm notify off` quita solo ese hook.
 
 ---
 
