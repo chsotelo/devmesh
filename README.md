@@ -182,6 +182,7 @@ The panel (`dm-tui`) only draws: everything that touches a machine still goes th
 | `dm repoint <ip\|host>` | follow the hub to a new address (checks its host key) |
 | `dm agent <state>` | for tool hooks: `working`, `waiting`, `idle`, `clear` |
 | `dm vscode on\|off\|status` | machines: VS Code terminals start inside tmux, visible from every device |
+| `dm notify on\|off\|status` | machines: a phone push (ntfy) when Claude Code asks for permission or waits for you |
 
 Hub side (as root): `devmesh invite|remove|ls|check|gc|backup|restore|apply|dist`.
 

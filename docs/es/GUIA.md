@@ -345,6 +345,8 @@ Instala la app **ntfy** y suscríbete a:
 
 Te llegará un aviso cuando una máquina se caiga y cuando vuelva. Si al agregar la laptop activaste "vigilar el hub", ese mismo `dm add` te dio un tema de **ntfy.sh**. Suscríbete a él para enterarte si el propio hub se cae.
 
+**Claude te necesita.** En cada máquina donde uses Claude Code, corre una vez `dm notify on`. Cuando una sesión pida permiso, o lleve un minuto esperando tu respuesta, la misma app mostrará "Claude on <máquina>: <proyecto>". Agrega un hook `Notification` a `~/.claude/settings.json`, junto a tus propios hooks; `dm notify off` quita solo ese hook.
+
 ---
 
 ## Aprobar dispositivos

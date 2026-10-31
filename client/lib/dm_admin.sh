@@ -195,6 +195,7 @@ dm trust init|pin|status  signed keys: sign existing devices (owner) | trust the
 dm agent <state>        for tool hooks: working | waiting | idle | clear
 dm watch [on|off]       phone/desktop alerts when a terminal waits for you (Approve/Reject)
 dm vscode on|off|status VS Code terminals inside tmux on this machine (opt-in; status shows which)
+dm notify on|off|status push to the phone when Claude needs you on this machine (opt-in)
 dm _key / _watch        machine-side helpers for dm watch (not for direct use)
 Networks that block UDP: dm falls back to the reverse tunnel (path B) automatically.
 EOF

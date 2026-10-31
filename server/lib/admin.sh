@@ -42,11 +42,25 @@ admin_dispatch() {
     signers) cmd_signers ;;
     bundle) cmd_bundle ;;
     backup-latest) cmd_backup_latest ;;
+    notify) cmd_admin_notify "$@" ;;
     help)
       printf 'commands: invite <name> [--lan L] [--watch-hub] [--machine|--phone|--client] [--owner] | remove <name> --confirm <name> |\n'
       printf '          ls | hosts | ssh-config | known-hosts | dist [version|sig] | version | backup-latest\n'
       printf '          approve <name> | revoke <name> (signatures on stdin) | pending | signers | bundle\n'
+      printf '          notify claude <project> perm|wait\n'
       ;;
     *) die "command not allowed: $cmd" ;;
+  esac
+}
+
+# notify claude <project> perm|wait: a Claude Code session on the caller needs the user.
+# The text is fixed here: a device only picks which message is sent, never writes it.
+cmd_admin_notify() {
+  (($# == 3)) && [[ $1 == claude ]] || die "usage: notify claude <project> perm|wait"
+  local title="Claude on $ADMIN_CALLER: $2"
+  case $3 in
+    perm) notify "$title" "Claude needs your permission" "warning" ;;
+    wait) notify "$title" "Claude is waiting for your answer" "hourglass" ;;
+    *) die "usage: notify claude <project> perm|wait" ;;
   esac
 }
