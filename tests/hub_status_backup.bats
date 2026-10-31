@@ -52,9 +52,29 @@ lap_wg() { awk -F'\t' '$1 == "lap" {print $9}' "$DEVMESH_ETC/registry.tsv"; }
   # Still down: no repeat.
   DEVMESH_NOW=$((now + 300)) devmesh check
   [ "$(grep -c 'lap is down' "$STUB_LOG")" -eq 1 ]
-  # Tunnel back: recovery alert.
+  # Tunnel back: recovery alert once it stays up.
   STUB_SS_PORTS=2202 DEVMESH_NOW=$((now + 400)) devmesh check
+  [ "$(grep -c 'Title: lap is back' "$STUB_LOG")" -eq 0 ]
+  STUB_SS_PORTS=2202 DEVMESH_NOW=$((now + 700)) devmesh check
   grep -q 'Title: lap is back' "$STUB_LOG"
+}
+
+@test "check: a sleeping machine that wakes for seconds (Power Nap) alerts down once, back only when awake" {
+  now=$(date +%s)
+  DEVMESH_NOW=$now devmesh check
+  DEVMESH_NOW=$((now + 61)) devmesh check
+  # Short wakes between sleeps: no "back", no second "down".
+  for t in 900 1800 2700; do
+    STUB_SS_PORTS=2202 DEVMESH_NOW=$((now + t)) devmesh check
+    DEVMESH_NOW=$((now + t + 60)) devmesh check
+    DEVMESH_NOW=$((now + t + 200)) devmesh check
+  done
+  [ "$(grep -c 'Title: lap is down' "$STUB_LOG")" -eq 1 ]
+  [ "$(grep -c 'Title: lap is back' "$STUB_LOG")" -eq 0 ]
+  # Really awake: one "back".
+  for t in 3600 3700 3800 3900; do STUB_SS_PORTS=2202 DEVMESH_NOW=$((now + t)) devmesh check; done
+  [ "$(grep -c 'Title: lap is back' "$STUB_LOG")" -eq 1 ]
+  [ "$(cat "$DEVMESH_STATE/machines/lap")" = up ]
 }
 
 @test "check: a fresh handshake counts as up even without the tunnel" {

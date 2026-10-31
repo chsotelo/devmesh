@@ -7,6 +7,16 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-10-31
+
+### Fixed
+
+- A sleeping Mac sent "down" and "back" every ~15 minutes (Power Nap wakes it for seconds):
+  the hub now reports a machine back only once it stays up for 5 minutes (`RECOVER_AFTER`).
+- `dm notify` pushed while the user was at the machine: nothing is sent when its keyboard
+  or mouse (macOS, GNOME) or any tmux client was used in the last 2 minutes
+  (`DM_NOTIFY_AWAY`).
+
 ## [0.12.0] - 2026-10-31
 
 ### Added

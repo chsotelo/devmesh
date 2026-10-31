@@ -6,6 +6,8 @@ load helpers
 setup() {
   setup_client
   export DM_SELF=/opt/devmesh/bin/dm
+  # The user is away unless a test says otherwise.
+  dm_user_idle() { printf '600\n'; }
   SETTINGS="$HOME/.claude/settings.json"
 }
 
@@ -60,4 +62,31 @@ EOF
   run dm_notify on
   [ "$status" -ne 0 ]
   [ "$(cat "$SETTINGS")" = "$(printf '{ // comment\n}')" ]
+}
+
+@test "hook: nothing is sent while the user is at this machine" {
+  dm_user_idle() { printf '30\n'; }
+  printf '{"message":"Claude needs your permission to use Bash"}' | CLAUDE_PROJECT_DIR=/x/redi dm_notify_hook
+  ! grep -q 'hub-admin' "$STUB_LOG"
+}
+
+@test "hook: sent when it cannot tell whether the user is here" {
+  dm_user_idle() { return 1; }
+  printf '{"message":"Claude is waiting for your input"}' | CLAUDE_PROJECT_DIR=/x/redi dm_notify_hook
+  grep -q 'hub-admin notify claude redi wait$' "$STUB_LOG"
+}
+
+@test "user_idle: the most recent of keyboard/mouse and tmux clients" {
+  dm_platform() { printf 'macos\n'; }
+  ioreg() { printf '    | |   "HIDIdleTime" = 400000000000\n'; }
+  tmux() { printf '%s\n' "$(($(date +%s) - 90))" "$(($(date +%s) - 5000))"; }
+  unset -f dm_user_idle
+  source "$REPO/client/lib/dm_notify.sh"
+  run dm_user_idle
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 89 ] && [ "$output" -le 92 ]
+  # No tmux clients: keyboard/mouse alone.
+  tmux() { return 1; }
+  run dm_user_idle
+  [ "$output" = 400 ]
 }
