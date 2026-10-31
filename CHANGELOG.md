@@ -7,6 +7,16 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-31
+
+### Added
+
+- `dm notify on|off|status`: when a Claude Code session asks for permission or waits for an
+  answer, the hub pushes "Claude on <machine>: <project>" to the ntfy app. It is Claude's
+  `Notification` hook (`dm _notify`), added next to the user's own hooks. The hub's new
+  `notify claude <project> perm|wait` admin command writes the text itself: a device only
+  picks which fixed message is sent.
+
 ## [0.11.6] - 2026-10-28
 
 ### Added

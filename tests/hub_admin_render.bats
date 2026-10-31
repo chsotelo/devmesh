@@ -156,3 +156,31 @@ admin() { SSH_ORIGINAL_COMMAND=$1 devmesh _ssh "${2:-tablet}"; }
   [[ $output == *"old	phone"* ]]
   [ "$(awk -F'\t' '$1 == "old" {print NF, $15, $16}' "$DEVMESH_ETC/registry.tsv")" = "16 android -" ]
 }
+
+@test "admin: notify claude pushes a fixed message for the calling machine" {
+  export NTFY_URL=https://hub.example.test NTFY_TOKEN=tk_test
+  run admin "notify claude redi perm" lap
+  [ "$status" -eq 0 ]
+  grep -q '^curl .*Title: Claude on lap: redi' "$STUB_LOG"
+  grep -q '^curl .*-d Claude needs your permission' "$STUB_LOG"
+  grep -q '^curl-config header = "Authorization: Bearer tk_test"' "$STUB_LOG"
+  : >"$STUB_LOG"
+  run admin "notify claude redi wait" lap
+  [ "$status" -eq 0 ]
+  grep -q '^curl .*-d Claude is waiting for your answer' "$STUB_LOG"
+}
+
+@test "admin: notify rejects unknown kinds and does nothing without ntfy" {
+  export NTFY_URL=https://hub.example.test NTFY_TOKEN=tk_test
+  for cmd in 'notify claude redi rm' 'notify claude' 'notify mail redi wait' 'notify claude redi wait extra'; do
+    run admin "$cmd" lap
+    [ "$status" -ne 0 ] || {
+      echo "allowed: $cmd"
+      return 1
+    }
+  done
+  ! grep -q '^curl' "$STUB_LOG"
+  NTFY_URL='' run admin "notify claude redi wait" lap
+  [ "$status" -eq 0 ]
+  ! grep -q '^curl' "$STUB_LOG"
+}

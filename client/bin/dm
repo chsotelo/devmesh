@@ -33,7 +33,7 @@ dm_share_dir() {
   fi
 }
 
-for _lib in dm_core dm_remote dm_terms dm_files dm_admin dm_repoint dm_trust dm_ui dm_app dm_workspace dm_layout dm_watch dm_vscode tui_target dm_feed dm_claude dm_power; do
+for _lib in dm_core dm_remote dm_terms dm_files dm_admin dm_repoint dm_trust dm_ui dm_app dm_workspace dm_layout dm_watch dm_vscode dm_notify tui_target dm_feed dm_claude dm_power; do
   # shellcheck source=/dev/null
   source "$(dm_share_dir)/lib/$_lib.sh"
 done
@@ -70,6 +70,7 @@ dm_dispatch() {
     agent) dm_agent "$@" ;;
     watch) dm_watch "$@" ;;
     vscode) dm_vscode "$@" ;;
+    notify) dm_notify "$@" ;;
     help | -h | --help) dm_help ;;
     # Machine-side helpers, called over SSH by other devices.
     _preview) dm_ui_preview "$@" ;;
@@ -109,6 +110,7 @@ dm_dispatch() {
     _watch) dm_remote_watch ;;
     _key) dm_remote_key "$@" ;;
     _notify-act) dm_watch_act "$@" ;;
+    _notify) dm_notify_hook ;;
     _vscode-shell) dm_vscode_shell ;;
     *) dm_die "unknown command: $cmd (try: dm help)" ;;
   esac

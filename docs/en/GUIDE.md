@@ -376,6 +376,11 @@ You get a notice when a machine goes down and when it comes back. If you used
 `--watch-hub` when adding the laptop, that `dm add` gave you an **ntfy.sh** topic. Subscribe
 to it to learn when the hub itself goes down.
 
+**Claude needs you.** On each machine where you use Claude Code, run `dm notify on` once.
+When a session asks for permission, or has been waiting for your answer for a minute, the
+same app shows "Claude on <machine>: <project>". It adds a `Notification` hook to
+`~/.claude/settings.json` next to your own hooks; `dm notify off` removes only that hook.
+
 ---
 
 ## Approving devices
