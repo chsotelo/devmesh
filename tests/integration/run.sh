@@ -372,7 +372,7 @@ check_not "machine tunnel key cannot -L into hub services" x dm-lap bash -c \
 x dm-lap pkill -f 'L 127.0.0.1:19999' || true
 
 say "alerts (machine down / back) through the authenticated ntfy"
-x dm-hub bash -c 'printf "DOWN_AFTER=5\nALERT_GRACE=1\n" >>/etc/devmesh/hub.conf'
+x dm-hub bash -c 'printf "DOWN_AFTER=5\nALERT_GRACE=1\nRECOVER_AFTER=0\n" >>/etc/devmesh/hub.conf'
 x dm-lap systemctl stop devmesh-tunnel.service wg-quick@devmesh || true
 sleep 8
 x dm-hub devmesh check || true
