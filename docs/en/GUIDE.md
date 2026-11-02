@@ -170,7 +170,9 @@ machine's terminals on the left, the real terminal on the right**.
   same place. Keys: `Ctrl+a +`, `Ctrl+a x`, `Ctrl+a d`.
 - **Phone:** under 70 columns the list is hidden and the terminal fills the screen; `☰` (or
   `Ctrl+a s`) swaps to the list and back, and choosing a row returns to the terminal.
-- **If the connection drops, the terminal reconnects by itself.**
+- **If the connection drops, the terminal reconnects by itself.** If the machine does not
+  answer at all (asleep, off or offline), the terminal says so once and keeps trying, less
+  often each time (up to every 30 s); `w` sends Wake-on-LAN, `q` closes it.
 - Needs tmux 3.2 or newer and the `dm-tui` binary. Without them, or with `DM_UI=cards` /
   `DM_UI=fzf`, `dm` uses the card panel / the fzf panel described below.
 

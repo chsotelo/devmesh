@@ -263,8 +263,8 @@ dm_local() {
 # directly instead of going through the hub. The address is asked to the machine itself over
 # path A/B, and the host key is the same pinned one (HostKeyAlias): a stale or foreign
 # address fails, it never trusts more.
-readonly DM_LAN_TTL=30     # minutes before the machine is asked for its address again
-readonly DM_LAN_OFF_MIN=10 # minutes path L is skipped after it failed
+readonly DM_LAN_TTL=30    # minutes before the machine is asked for its address again
+readonly DM_LAN_OFF_MIN=2 # minutes path L is skipped after it failed
 
 dm_lan_file() { printf '%s/lan-%s\n' "$DM_CACHE" "$1"; }
 dm_lan_off_file() { printf '%s/lan-off-%s\n' "$DM_CACHE" "$1"; }
@@ -390,7 +390,10 @@ dm_path() {
     return 0
   fi
   if ip=$(dm_lan_ip "$host") && ! dm_lan_off "$host" && dm_lan_near "$ip"; then
-    if ssh -o ConnectTimeout=1 "${DM_SSH_PROBE[@]}" "$host-l" true 2>/dev/null; then
+    # Twice: one slow answer (a busy machine, a Wi-Fi hiccup) must not send the traffic the
+    # long way round, through the hub, for DM_LAN_OFF_MIN minutes.
+    if ssh -o ConnectTimeout=1 "${DM_SSH_PROBE[@]}" "$host-l" true 2>/dev/null ||
+      ssh -o ConnectTimeout=2 "${DM_SSH_PROBE[@]}" "$host-l" true 2>/dev/null; then
       printf '%s-l\n' "$host"
       return 0
     fi

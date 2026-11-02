@@ -162,7 +162,7 @@ terminales de esa máquina a la izquierda y la terminal real a la derecha**.
   devuelve al mismo lugar. Teclas: `Ctrl+a +`, `Ctrl+a x`, `Ctrl+a d`.
 - **Celular:** con menos de 70 columnas la lista se oculta y la terminal ocupa la pantalla; `☰`
   (o `Ctrl+a s`) alterna entre la lista y la terminal, y al elegir una fila vuelves a la terminal.
-- **Si se corta la conexión, la terminal se reconecta sola.**
+- **Si se corta la conexión, la terminal se reconecta sola.** Si la máquina no responde (dormida, apagada o sin red), la terminal lo dice una vez y sigue intentando, cada vez más espaciado (como mucho cada 30 s); `w` la despierta por Wake-on-LAN, `q` la cierra.
 - Requiere tmux 3.2 o superior y el binario `dm-tui`. Sin ellos, o con `DM_UI=cards` /
   `DM_UI=fzf`, `dm` usa el panel de tarjetas / el de fzf que se describen a continuación.
 

@@ -97,10 +97,17 @@ dm_ws_open() {
   tmux set-option -w -t "$target" automatic-rename off
 }
 
+# dm_ws_backoff N: seconds before the Nth retry of a machine that does not answer.
+dm_ws_backoff() {
+  local s=$((3 << ($1 - 1)))
+  ((s < 30)) || s=30
+  printf '%s\n' "$s"
+}
+
 # _tab HOST SESSION WINDOW DIRSPEC — runs inside a tab: connect, and reconnect on drops.
 # A normal detach (Ctrl+b d on the remote side) closes the tab and returns to the panel.
 dm_ws_tab() {
-  local host=$1 session=$2 win=$3 spec=$4 rc key
+  local host=$1 session=$2 win=$3 spec=$4 rc key wait away=0
   [[ $win == - ]] && win=""
   dm_valid_session "$session" || dm_die "invalid session name"
   while true; do
@@ -112,10 +119,21 @@ dm_ws_tab() {
       tmux select-window -t :=panel 2>/dev/null || true
       return 0
     fi
-    dm_t "$M_CONN_LOST" "$host"
+    # A machine that answers on no path is asleep, off or offline: said once, then retried
+    # by itself, waiting longer each time. Any key retries at once.
+    if dm_path "$host" </dev/null >/dev/null 2>&1; then
+      away=0 wait=3
+      dm_t "$M_CONN_LOST" "$host"
+    else
+      ((away++ > 0)) || dm_t "$M_HOST_AWAY" "$host"
+      wait=$(dm_ws_backoff "$away")
+    fi
     key=""
-    read -r -s -n 1 -t 3 key || true
-    [[ $key == q ]] && return 0
+    read -r -s -n 1 -t "$wait" key || true
+    case $key in
+      q) return 0 ;;
+      w) (dm_wake "$host") >/dev/null 2>&1 || true ;;
+    esac
     spec=-
   done
 }

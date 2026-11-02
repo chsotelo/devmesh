@@ -7,6 +7,19 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.12.3] - 2026-11-02
+
+### Fixed
+
+- A terminal of a machine that does not answer (asleep, off, offline) printed "Connection
+  lost. Reconnecting in 3 s…" over and over. It now says once that the machine is not
+  answering, keeps retrying by itself (3, 6, 12, 24, then every 30 s; any key retries now)
+  and `w` sends Wake-on-LAN. A link that drops while the machine still answers reconnects as
+  before.
+- Path L (same LAN): one slow answer no longer sends the traffic through the hub for 10
+  minutes. The LAN is tried twice (1 s, then 2 s) and, once given up, tried again after 2
+  minutes.
+
 ## [0.12.2] - 2026-11-01
 
 ### Fixed
