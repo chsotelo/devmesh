@@ -37,7 +37,11 @@ dm_notify_hook() {
   if idle=$(dm_user_idle) && ((idle < ${DM_NOTIFY_AWAY:-120})); then
     return 0
   fi
-  [[ $input != *permission* ]] || kind=perm
+  # notification_type (older Claude versions: only the message says it).
+  if [[ $input =~ \"notification_type\"[[:space:]]*:[[:space:]]*\"permission_prompt\" ||
+    $input =~ \"message\"[[:space:]]*:[[:space:]]*\"Claude\ needs\ your\ permission ]]; then
+    kind=perm
+  fi
   proj=$(dm_sanitize "$(basename "${CLAUDE_PROJECT_DIR:-$PWD}")")
   ssh -o BatchMode=yes -o ConnectTimeout=5 hub-admin notify claude "${proj:-session}" "$kind" \
     </dev/null >/dev/null 2>&1 || true
@@ -71,11 +75,16 @@ def load(path):
     return data if isinstance(data, dict) else None
 
 
+def is_dm_notify(command):
+    command = str(command)
+    return command == "dm _notify" or command.endswith("/dm _notify")
+
+
 def ours(group):
-    # A group whose every hook is devmesh's "<dm> _notify".
+    # A group whose every hook is devmesh's "<path>/dm _notify".
     hooks = group.get("hooks") if isinstance(group, dict) else None
     return isinstance(hooks, list) and bool(hooks) and all(
-        isinstance(h, dict) and str(h.get("command", "")).endswith(" _notify") for h in hooks)
+        isinstance(h, dict) and is_dm_notify(h.get("command", "")) for h in hooks)
 
 
 def groups(data):
@@ -125,7 +134,8 @@ def write(path, data):
 
 
 def main():
-    action, path = sys.argv[1], sys.argv[2]
+    # A symlinked settings file (dotfiles) stays a link: its target is what gets edited.
+    action, path = sys.argv[1], os.path.realpath(sys.argv[2])
     data = load(path) if os.path.exists(path) else {}
     if data is None or groups(data) is None:
         print("not-json")

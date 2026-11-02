@@ -380,7 +380,8 @@ to it to learn when the hub itself goes down.
 **Claude needs you.** On each machine where you use Claude Code, run `dm notify on` once.
 When a session asks for permission, or has been waiting for your answer for a minute, and
 you have not touched that machine (keyboard, mouse or a terminal attached from another
-device) for 2 minutes, the same app shows "Claude on <machine>: <project>". It adds a `Notification` hook to
+device) for 2 minutes, the same app shows "Claude on <machine>: <project>" (the same message at most once every
+10 minutes). It adds a `Notification` hook to
 `~/.claude/settings.json` next to your own hooks; `dm notify off` removes only that hook.
 
 ---

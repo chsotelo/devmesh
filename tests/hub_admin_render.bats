@@ -172,15 +172,28 @@ admin() { SSH_ORIGINAL_COMMAND=$1 devmesh _ssh "${2:-tablet}"; }
 
 @test "admin: notify rejects unknown kinds and does nothing without ntfy" {
   export NTFY_URL=https://hub.example.test NTFY_TOKEN=tk_test
-  for cmd in 'notify claude redi rm' 'notify claude' 'notify mail redi wait' 'notify claude redi wait extra'; do
+  for cmd in 'notify claude redi rm' 'notify claude' 'notify mail redi wait' 'notify claude redi wait extra' 'notify claude Evil.com wait'; do
     run admin "$cmd" lap
     [ "$status" -ne 0 ] || {
       echo "allowed: $cmd"
       return 1
     }
   done
-  ! grep -q '^curl' "$STUB_LOG"
+  [ "$(grep -c '^curl' "$STUB_LOG")" -eq 0 ]
   NTFY_URL='' run admin "notify claude redi wait" lap
   [ "$status" -eq 0 ]
   ! grep -q '^curl' "$STUB_LOG"
+}
+
+@test "admin: notify sends the same message for a project at most once per NOTIFY_EVERY" {
+  export NTFY_URL=https://hub.example.test NTFY_TOKEN=tk_test
+  for _ in 1 2 3; do admin "notify claude redi wait" lap; done
+  [ "$(grep -c '^curl ' "$STUB_LOG")" -eq 1 ]
+  # Another kind or project is a different message.
+  admin "notify claude redi perm" lap
+  admin "notify claude tandm wait" lap
+  [ "$(grep -c '^curl ' "$STUB_LOG")" -eq 3 ]
+  # After the window it is sent again.
+  DEVMESH_NOW=$(($(date +%s) + 601)) admin "notify claude redi wait" lap
+  [ "$(grep -c '^curl ' "$STUB_LOG")" -eq 4 ]
 }
