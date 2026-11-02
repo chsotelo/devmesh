@@ -90,3 +90,32 @@ EOF
   run dm_user_idle
   [ "$output" = 400 ]
 }
+
+@test "hook: the kind comes from notification_type, not from any word in the payload" {
+  printf '{"session_id":"s","cwd":"/x/permission-tool","permission_mode":"default","hook_event_name":"Notification","message":"Claude is waiting for your input","notification_type":"idle_prompt"}' |
+    CLAUDE_PROJECT_DIR=/x/redi dm_notify_hook
+  grep -q 'hub-admin notify claude redi wait$' "$STUB_LOG"
+  : >"$STUB_LOG"
+  printf '{"permission_mode":"default","notification_type": "permission_prompt","message":"Claude needs your permission to use Bash"}' |
+    CLAUDE_PROJECT_DIR=/x/redi dm_notify_hook
+  grep -q 'hub-admin notify claude redi perm$' "$STUB_LOG"
+}
+
+@test "on: a symlinked settings file stays a symlink; its target is edited" {
+  mkdir -p "$HOME/.claude" "$HOME/dotfiles"
+  printf '{"theme": "dark"}\n' >"$HOME/dotfiles/claude.json"
+  ln -s "$HOME/dotfiles/claude.json" "$SETTINGS"
+  run dm_notify on
+  [ "$status" -eq 0 ]
+  [ -L "$SETTINGS" ]
+  grep -q '"command": "/opt/devmesh/bin/dm _notify"' "$HOME/dotfiles/claude.json"
+}
+
+@test "off: another tool's \"_notify\" hook is not devmesh's and is kept" {
+  mkdir -p "$HOME/.claude"
+  printf '{"hooks": {"Notification": [{"hooks": [{"type": "command", "command": "other _notify"}]}]}}\n' >"$SETTINGS"
+  run dm_notify status
+  [[ $output == off* ]]
+  run dm_notify off
+  grep -q '"other _notify"' "$SETTINGS"
+}

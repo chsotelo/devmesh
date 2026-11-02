@@ -54,13 +54,21 @@ admin_dispatch() {
 }
 
 # notify claude <project> perm|wait: a Claude Code session on the caller needs the user.
-# The text is fixed here: a device only picks which message is sent, never writes it.
+# The text is fixed here: a device only picks which message is sent and a plain project name.
+# The same message is sent at most once per NOTIFY_EVERY (Claude repeats its idle prompt).
 cmd_admin_notify() {
-  (($# == 3)) && [[ $1 == claude ]] || die "usage: notify claude <project> perm|wait"
-  local title="Claude on $ADMIN_CALLER: $2"
+  local text tags stamp last now
+  (($# == 3)) && [[ $1 == claude && $2 =~ ^[a-z0-9_-]{1,30}$ ]] || die "usage: notify claude <project> perm|wait"
   case $3 in
-    perm) notify "$title" "Claude needs your permission" "warning" ;;
-    wait) notify "$title" "Claude is waiting for your answer" "hourglass" ;;
+    perm) text="Claude needs your permission" tags=warning ;;
+    wait) text="Claude is waiting for your answer" tags=hourglass ;;
     *) die "usage: notify claude <project> perm|wait" ;;
   esac
+  stamp="$DEVMESH_STATE/notify/$ADMIN_CALLER-$2-$3"
+  now=$(now_epoch)
+  read -r last 2>/dev/null <"$stamp" || last=0
+  ((now - last >= NOTIFY_EVERY)) || return 0
+  mkdir -p "${stamp%/*}"
+  printf '%s\n' "$now" >"$stamp"
+  notify "Claude on $ADMIN_CALLER: $2" "$text" "$tags"
 }

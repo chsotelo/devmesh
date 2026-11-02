@@ -7,6 +7,17 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-11-01
+
+### Fixed
+
+- `dm notify`: the kind of push comes from Claude's `notification_type`, not from any word
+  "permission" in the payload; a symlinked `~/.claude/settings.json` stays a symlink (its
+  target is edited); another tool's `… _notify` hook is no longer taken for devmesh's.
+- Hub `notify`: the same message for a machine and project is sent at most once every
+  10 minutes (`NOTIFY_EVERY`; Claude repeats its idle prompt), and the project must be a plain
+  name (`[a-z0-9_-]`, up to 30 characters).
+
 ## [0.12.1] - 2026-10-31
 
 ### Fixed
