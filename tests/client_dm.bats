@@ -74,6 +74,25 @@ lan_route() {
   ! grep -q 'lap-l' "$STUB_LOG"
 }
 
+@test "path L: one slow LAN try is retried before giving the LAN up" {
+  printf '192.168.18.26\n' >"$DM_CACHE/lan-lap"
+  lan_route near
+  ssh() {
+    printf 'ssh %s\n' "$*" >>"$STUB_LOG"
+    [[ $* == *lap-l* ]] || return 0
+    # The first LAN try times out, the second answers.
+    [[ -e $BATS_TEST_TMPDIR/tried ]] && return 0
+    touch "$BATS_TEST_TMPDIR/tried"
+    return 255
+  }
+  [ "$(dm_path lap)" = lap-l ]
+  [ ! -e "$DM_CACHE/lan-off-lap" ]
+}
+
+@test "path L: a LAN given up is tried again after 2 minutes" {
+  [ "$DM_LAN_OFF_MIN" -eq 2 ]
+}
+
 @test "path L: a failed LAN try backs off, forgets the address and uses path A" {
   printf '192.168.18.26\n' >"$DM_CACHE/lan-lap"
   lan_route near
@@ -440,10 +459,32 @@ exit 1
   run dm_ws_tab lap main - - <<<"q"
   [ "$status" -eq 0 ]
   [[ $output == *"Conexión con lap perdida"* ]]
+}
+
+@test "workspace tab: a machine that does not answer says so once and keeps trying by itself" {
+  tmux() { printf 'tmux %s\n' "$*" >>"$STUB_LOG"; }
   dm_tty() { dm_die "lap is unreachable"; }
-  run dm_ws_tab lap main - - <<<"q"
+  export STUB_SSH_DOWN="lap lap-b"
+  # Two keys that retry at once, then q.
+  run dm_ws_tab lap main - - <<<$'xyq'
   [ "$status" -eq 0 ]
-  [[ $output == *"Conexión con lap perdida"* ]]
+  [[ $output != *"perdida"* ]]
+  [ "$(grep -c 'lap no responde' <<<"$output")" -eq 1 ]
+  [ "$(grep -c '^ssh .* lap-b true' "$STUB_LOG")" -ge 3 ]
+}
+
+@test "workspace tab: w on a machine that does not answer sends Wake-on-LAN" {
+  tmux() { printf 'tmux %s\n' "$*" >>"$STUB_LOG"; }
+  dm_tty() { return 255; }
+  dm_wake() { printf 'wake %s\n' "$*" >>"$STUB_LOG"; }
+  export STUB_SSH_DOWN="lap lap-b"
+  run dm_ws_tab lap main - - <<<$'wq'
+  [ "$status" -eq 0 ]
+  grep -q '^wake lap$' "$STUB_LOG"
+}
+
+@test "workspace tab: retries wait longer each time, up to 30 s" {
+  [ "$(for n in 1 2 3 4 5 6; do dm_ws_backoff "$n"; done | tr '\n' ' ')" = "3 6 12 24 30 30 " ]
 }
 
 @test "this device is reached locally: dm_run and dm_tty never ssh to themselves" {
