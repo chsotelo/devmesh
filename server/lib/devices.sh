@@ -6,6 +6,11 @@ cmd_remove() {
   [[ ${2:-} == --confirm ]] && confirm=${3:-}
   valid_name "$name" || die "usage: devmesh remove <name> --confirm <name>"
   [[ $confirm == "$name" ]] || die "refusing: pass --confirm $name"
+  # Over the admin channel only an approver may remove another device (dm rm signs the
+  # revocation first); any device may remove itself. Root on the hub is not limited.
+  if [[ -n ${ADMIN_CALLER:-} && $ADMIN_CALLER != "$name" ]] && signers_exist; then
+    signer_is "$ADMIN_CALLER" || die "only an approver can remove another device"
+  fi
 
   lock_acquire
   local code
@@ -25,6 +30,7 @@ cmd_remove() {
     [[ $(signers_rows | grep -c .) -gt 1 ]] || die "refusing: $name is the last approver"
     signers_rows | awk -F'\t' -v n="$name" '$1 != n' | atomic_write "$DEVMESH_SIGNERS" 0644
   fi
+  ip_retire "$(reg_field "$(reg_get "$name")" ip)"
   reg_remove "$name"
   render_all
   # Keys are gone from the files; now kill live tunnels and jumps (legitimate machines

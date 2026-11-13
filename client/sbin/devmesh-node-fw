@@ -2,7 +2,10 @@
 # devmesh-node-fw up|down <iface> — wg-quick PostUp/PostDown hook on Linux machines (root).
 # Inbound traffic on the mesh interface is limited to: established connections, ping, SSH,
 # mosh (UDP 60000-61000) and the ports listed in DM_MESH_OPEN (node.conf). Everything else
-# is dropped. All rules live in the DEVMESH-IN chain; nothing else is ever touched.
+# is dropped. Rules live in the DEVMESH-IN chain (hooked from INPUT) and, on machines with
+# Docker, in DEVMESH-FWD (hooked from DOCKER-USER): ports Docker publishes are DNATed to the
+# containers and never reach INPUT, so mesh traffic to them is filtered there, by the port the
+# peer asked for. Nothing else is touched.
 # devmesh-node-fw lan — second layer for path L (DEVMESH-LAN): outside the mesh and localhost,
 # ssh and mosh are accepted only from the trusted LAN the machine is on right now
 # ($NODE_RUN/lan, written by "devmesh-node lan apply"), on that interface; the rest is
@@ -14,6 +17,7 @@ set -f # the port list is split on spaces; never expanded as file globs
 NODE_ETC=${NODE_ETC:-/etc/devmesh}
 NODE_RUN=${NODE_RUN:-/run/devmesh}
 FW_CHAIN=DEVMESH-IN
+FWD_CHAIN=DEVMESH-FWD
 LAN_CHAIN=DEVMESH-LAN
 # One entry: tcp/<port>, udp/<port> or tcp|udp/<a>-<b>, ports 1-65535, a <= b.
 FW_ENTRY_RE='^(tcp|udp)/([1-9][0-9]{0,4})(-([1-9][0-9]{0,4}))?$'
@@ -69,6 +73,28 @@ fw_up() {
   done
   iptables -A "$FW_CHAIN" -j DROP
   iptables -C INPUT -i "$iface" -j "$FW_CHAIN" 2>/dev/null || iptables -I INPUT 1 -i "$iface" -j "$FW_CHAIN"
+  fw_docker "$iface" "$entries"
+}
+
+# fw_docker IFACE ENTRIES — mesh traffic to Docker-published ports. Only DM_MESH_OPEN ports, by
+# the destination the peer used (before Docker's DNAT), plus established connections. When Docker
+# is installed but not running yet, DOCKER-USER is created now: Docker keeps its rules on start.
+fw_docker() {
+  local iface=$1 entries=$2 entry proto ports
+  if ! iptables -n -L DOCKER-USER >/dev/null 2>&1; then
+    command -v "${DM_DOCKERD:-dockerd}" >/dev/null 2>&1 || return 0
+    iptables -N DOCKER-USER
+  fi
+  iptables -n -L "$FWD_CHAIN" >/dev/null 2>&1 || iptables -N "$FWD_CHAIN"
+  iptables -F "$FWD_CHAIN"
+  iptables -A "$FWD_CHAIN" -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+  for entry in $entries; do
+    proto=${entry%%/*}
+    ports=${entry#*/}
+    iptables -A "$FWD_CHAIN" -p "$proto" -m conntrack --ctorigdstport "${ports/-/:}" -j RETURN
+  done
+  iptables -A "$FWD_CHAIN" -j DROP
+  iptables -C DOCKER-USER -i "$iface" -j "$FWD_CHAIN" 2>/dev/null || iptables -I DOCKER-USER 1 -i "$iface" -j "$FWD_CHAIN"
 }
 
 # fw_valid_lan CIDR — a private IPv4 network (10/8, 172.16/12, 192.168/16), prefix 8-32,
@@ -130,6 +156,13 @@ fw_down() {
   if iptables -n -L "$FW_CHAIN" >/dev/null 2>&1; then
     iptables -F "$FW_CHAIN"
     iptables -X "$FW_CHAIN"
+  fi
+  while iptables -C DOCKER-USER -i "$iface" -j "$FWD_CHAIN" 2>/dev/null; do
+    iptables -D DOCKER-USER -i "$iface" -j "$FWD_CHAIN"
+  done
+  if iptables -n -L "$FWD_CHAIN" >/dev/null 2>&1; then
+    iptables -F "$FWD_CHAIN"
+    iptables -X "$FWD_CHAIN"
   fi
 }
 

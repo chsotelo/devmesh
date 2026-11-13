@@ -9,6 +9,8 @@ setup() {
   local t=$BATS_TEST_TMPDIR
   export PATH="$REPO/tests/stubs:$PATH"
   export STUB_LOG="$t/stub.log" STUB_IPT="$t/ipt.db"
+  # Hermetic: whether this host has dockerd must not change the rules under test.
+  export DM_DOCKERD=/nonexistent
   : >"$STUB_LOG"
   export NODE_ETC="$t/etc"
   mkdir -p "$NODE_ETC"
@@ -43,6 +45,28 @@ DEVMESH-IN -p tcp --dport 8000 -j ACCEPT
 DEVMESH-IN -p udp --dport 5353 -j ACCEPT
 DEVMESH-IN -p tcp --dport 3000:3010 -j ACCEPT
 DEVMESH-IN -j DROP" ]
+}
+
+@test "node-fw: on Docker hosts mesh traffic to published ports is filtered in DOCKER-USER too" {
+  # Published ports are DNATed to containers and never reach INPUT/DEVMESH-IN.
+  set_open "tcp/8080 tcp/3000-3010"
+  STUB_DOCKER=1 fw up devmesh
+  STUB_DOCKER=1 fw up devmesh
+  [ "$(grep -c '^DOCKER-USER -i devmesh -j DEVMESH-FWD$' "$STUB_IPT")" -eq 1 ]
+  [ "$(grep '^DEVMESH-FWD ' "$STUB_IPT")" = "DEVMESH-FWD -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+DEVMESH-FWD -p tcp -m conntrack --ctorigdstport 8080 -j RETURN
+DEVMESH-FWD -p tcp -m conntrack --ctorigdstport 3000:3010 -j RETURN
+DEVMESH-FWD -j DROP" ]
+  STUB_DOCKER=1 fw down devmesh
+  ! grep -q 'DEVMESH-FWD' "$STUB_IPT"
+}
+
+@test "node-fw: without Docker no forward chain is created; Docker installed but stopped gets DOCKER-USER now" {
+  DM_DOCKERD=/nonexistent fw up devmesh
+  ! grep -q 'DEVMESH-FWD\|DOCKER-USER' "$STUB_IPT"
+  DM_DOCKERD=bash fw up devmesh
+  grep -qxF ':DOCKER-USER' "$STUB_IPT"
+  grep -qxF 'DOCKER-USER -i devmesh -j DEVMESH-FWD' "$STUB_IPT"
 }
 
 @test "node-fw: down leaves nothing behind and never touches other rules" {

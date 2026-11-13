@@ -58,13 +58,17 @@ setup() {
   [ "$(fmt_ago 400)" = "10m ago" ]
 }
 
-@test "allocation skips used IPs, reserved invites and reuses freed ones" {
+@test "allocation skips used IPs and reserved invites, and reuses freed ones only last" {
   [ "$(alloc_ip)" = 10.73.0.2 ]
   enroll_machine lap
   devmesh invite pc2 >/dev/null
   [ "$(alloc_ip)" = 10.73.0.4 ]
   [ "$(port_for_ip 10.73.0.11)" = 2211 ]
   devmesh remove lap --confirm lap >/dev/null
+  # 10.73.0.2 is quarantined while other addresses are free.
+  [ "$(alloc_ip)" = 10.73.0.4 ]
+  for o in $(seq 4 254); do printf '10.73.0.%s\n' "$o"; done >"$BATS_TEST_TMPDIR/all"
+  reg_column() { cat "$BATS_TEST_TMPDIR/all"; }
   [ "$(alloc_ip)" = 10.73.0.2 ]
 }
 

@@ -85,7 +85,10 @@ bs_enroll() {
     -o HostKeyAlias="$DM_HUB_HOST" -o IgnoreUnknown=WarnWeakCrypto -o WarnWeakCrypto=no-pq-kex \
     -p "${DM_HUB_SSH_PORT:-2222}" "enroll@$DM_HUB_HOST" enroll) || bs_die "hub rejected the enrollment (expired or already used code?)"
   [[ $reply == "OK $DM_NAME "* ]] || bs_die "unexpected hub reply: $reply"
-  read -r _ _ _ip DM_PORT DM_COLOR <<<"$reply"
+  read -r _ _ _ip DM_PORT DM_COLOR _extra <<<"$reply"
+  # Both go unquoted into node.conf, which root sources: digits (or "-") only.
+  [[ $DM_PORT =~ ^([0-9]{1,5}|-)$ && $DM_COLOR =~ ^([0-9]{1,3}|-)$ && -z ${_extra:-} ]] ||
+    bs_die "unexpected hub reply: $reply"
   export DM_PORT DM_COLOR
   bs_log "hub accepted $DM_NAME"
 }

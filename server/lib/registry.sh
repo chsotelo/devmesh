@@ -130,17 +130,31 @@ invite_values() {
 invite_name_taken() { invite_values INV_NAME | in_list "$1"; }
 
 # --- Allocation ------------------------------------------------------------------
+# Addresses of removed devices. Machines may still hold grants pinned to them (Herdr app keys
+# with from="<ip>" on a machine that was offline at removal), so they are reused last.
+ip_retired_file() { printf '%s/retired-ips\n' "$DEVMESH_STATE"; }
+
+ip_retire() {
+  [[ -n ${1:-} && $1 != - ]] || return 0
+  mkdir -p "$DEVMESH_STATE"
+  printf '%s\n' "$1" >>"$(ip_retired_file)"
+}
+
 alloc_ip() {
-  local used octet
+  local used retired octet ip pass
   used=$({
     reg_column ip
     invite_values INV_IP
   } | sort -u)
-  for octet in $(seq 2 254); do
-    grep -qxF "$SUBNET_PREFIX.$octet" <<<"$used" || {
-      printf '%s\n' "$SUBNET_PREFIX.$octet"
+  retired=$(cat "$(ip_retired_file)" 2>/dev/null || true)
+  for pass in fresh retired; do
+    for octet in $(seq 2 254); do
+      ip=$SUBNET_PREFIX.$octet
+      grep -qxF "$ip" <<<"$used" && continue
+      [[ $pass == fresh ]] && grep -qxF "$ip" <<<"$retired" && continue
+      printf '%s\n' "$ip"
       return 0
-    }
+    done
   done
   die "no free IP in $SUBNET_PREFIX.0/24"
 }

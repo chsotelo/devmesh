@@ -27,7 +27,7 @@ Each device verifies against its local `allowed_signers` (`ssh-keygen -Y verify`
 | Attacker | Without approvers (0.7) | With approvers, devices in signed mode |
 |---|---|---|
 | Internet, no keys | Nothing: only 51820/udp, 2222/tcp and 443 or 8443/tcp are open; joining needs the code and its secret | Same |
-| Stolen join line | Joins a device if used within 15 min (single use) | The device is **pending**: machines do not accept its key until an approver signs it, and the approver must type, for every key it signs, the last 16 characters of that key's fingerprint as printed on the new device: the client key, plus the host key for a machine (also for `--signer`) |
+| Stolen join line | Joins a device if used within 15 min (single use) | The device is **pending**: machines do not accept its key until an approver signs it, and the approver must type, for every key it signs, the last 16 characters of that key's fingerprint as printed on the new device: the client key, plus the host key for a machine (also for `--signer`). Until then it is a mesh peer that can only read (`ls`, `hosts`, `bundle`...) and remove itself: it cannot remove other devices, invite, or push notifications |
 | Root on the hub | Adds a key and enters machines; impersonates machines; ships code to every device | Cannot add access, impersonate a machine or ship code. Can cut the service, see metadata (names, IPs, who connects and when), refuse to publish approvals or revocations, and attack devices that have not joined yet (see below) |
 | Stolen phone or laptop | Enters machines until `dm rm` | Same until revoked. If it is an approver: revoke it from another approver (`dm rm`), which signs the revocation; machines drop the key and approver at the next sync |
 | Compromised machine | That machine and the projects on it; its mesh address could probe other machines, but they answer only SSH, mosh and ping (Linux) | Same |
@@ -71,7 +71,7 @@ Forwarding between devices stays open on the hub: the filter is on each machine.
 | Mesh, Linux machine | 60000-61000/udp | mosh (path A) |
 | Mesh, Linux machine | ping | diagnosis |
 | Mesh, Linux machine | `DM_MESH_OPEN` | only what the owner opens with `sudo devmesh-node mesh open` |
-| Mesh, any other port | n/a | dropped by the chain `DEVMESH-IN` on the machine (installed by `PostUp` of the WireGuard interface), so a service on `0.0.0.0` is not reachable by other devices or by the hub |
+| Mesh, any other port | n/a | dropped by the chain `DEVMESH-IN` on the machine (installed by `PostUp` of the WireGuard interface), so a service on `0.0.0.0` is not reachable by other devices or by the hub. Ports Docker publishes never reach `INPUT` (Docker DNATs them to the container): the chain `DEVMESH-FWD`, hooked from `DOCKER-USER`, applies the same allowlist to them |
 | macOS, Android/Termux | n/a | no mesh firewall (no `pf` / no root); macOS sshd listens on `127.0.0.1` only |
 
 Path L (same LAN) changes where the connection goes, not what it trusts: the client only uses
@@ -97,6 +97,8 @@ Use `dm port` for web servers and databases instead of opening them.
   it, and the mesh address limits where it can be used, not who holds the private key.
   `dm herdr ls` lists the keys, `dm herdr revoke <device>` removes them, and `dm rm <device>`
   revokes them on every online machine (offline ones are reported; run the revoke again later).
+  The address of a removed device is quarantined on the hub: it is handed out again only when no
+  other address is free, so a line left on an offline machine does not match the next device.
 - **macOS.** devmesh's own sshd on a Mac is localhost-only. For the Herdr app the owner turns
   on macOS Remote Login on purpose, which opens port 22 on the Mac's network interfaces:
   allow only your user, turn off full disk access for remote users, and make that sshd keys-only.

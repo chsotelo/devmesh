@@ -7,6 +7,35 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.13.2] - 2026-11-13
+
+### Security
+
+Fixes from a full security audit of 0.13.1 (independently verified findings).
+
+- Machines with Docker: ports Docker publishes were reachable from any mesh peer (including a
+  device still pending approval, and the hub), because the mesh firewall only filtered `INPUT`.
+  A new chain `DEVMESH-FWD`, hooked from `DOCKER-USER`, applies the mesh allowlist to them.
+  `dm update` on Linux machines applies it.
+- Hub: a device pending approval could remove any machine or non-last approver, invite, and push
+  notifications. Once the hub has approvers, a pending device can only read and remove itself,
+  and only an approver can remove another device.
+- Hub: the notification throttle was keyed by a caller-chosen project name; a device now sends at
+  most `NOTIFY_BURST` (5) notifications per `NOTIFY_EVERY`.
+- Trust: `dm trust pin` could re-admit an approver that this device had revoked if the hub still
+  listed it, and its key could then sign updates. Revoked keys are now dropped when trust is
+  rebuilt and never verify any signature, updates included.
+- Trust: a host-only approval recorded the hub's (unconfirmed) client key in the local approval
+  log, which `dm rm` trusts when signing a revocation. Only keys the user confirmed are logged.
+- Trust: removing an approver that had signed revocations made every device that joined later
+  reject all bundles. A revocation set that an epoch signed by a current approver commits to is
+  now accepted as a whole.
+- Hub: the address of a removed device is quarantined and reused last, so a Herdr app key left on
+  an offline machine (pinned with `from=<ip>`) does not match the next device.
+- Termux: a join killed by Android during the WireGuard import could leave the config, private
+  key included, in Download. Every install and `dm update` now removes it.
+- Enrollment: the hub's reply fields are validated before they are written to `node.conf`.
+
 ## [0.13.1] - 2026-11-13
 
 ### Fixed
