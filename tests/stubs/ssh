@@ -2,8 +2,19 @@
 # Test stub for ssh: replies from $STUB_SSH_DIR/<host>/<cmd words joined by _>.
 # Hosts in STUB_SSH_DOWN fail with 255 (unreachable); every call is logged.
 [[ -n ${STUB_LOG:-} ]] && printf 'ssh %s\n' "$*" >>"$STUB_LOG"
-host="" gflag=0
-for a in "$@"; do [[ $a == -G ]] && gflag=1; done
+host="" gflag=0 nflag=0
+for a in "$@"; do
+  [[ $a == -G ]] && gflag=1
+  [[ $a == -n ]] && nflag=1
+done
+# Like a real ssh without -n: STUB_SSH_EAT_STDIN=1 takes everything stdin holds (the remote
+# command gets it; the local caller loses it).
+if [[ ${STUB_SSH_EAT_STDIN:-0} == 1 && $nflag == 0 ]]; then
+  buf=$(mktemp)
+  cat >"$buf"
+  exec <"$buf"
+  rm -f "$buf"
+fi
 while (($#)); do
   case $1 in
     -[oipLRWJFlbcDEemQSw]) shift 2 ;;

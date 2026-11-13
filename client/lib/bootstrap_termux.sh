@@ -10,9 +10,13 @@ TX_CONF_DIR=${TX_CONF_DIR:-$HOME/.config/devmesh}
 TX_DOWNLOADS=${TX_DOWNLOADS:-$HOME/storage/downloads}
 readonly TX_MTU=1280
 
+# A fresh Termux upgrades its base packages first, and dpkg may ask whether to replace a
+# config file. That question used to hide behind ">/dev/null" and the join looked stuck: the
+# output stays visible and existing config files are kept without asking.
 termux_pkg_install() {
-  bs_log "installing packages"
-  pkg install -y openssh mosh fzf tmux wireguard-tools tar coreutils >/dev/null
+  bs_log "installing packages (a fresh Termux updates itself first: this can take a few minutes)"
+  DEBIAN_FRONTEND=noninteractive pkg install -y -o Dpkg::Options::=--force-confdef \
+    -o Dpkg::Options::=--force-confold openssh mosh fzf tmux wireguard-tools tar coreutils </dev/null
 }
 
 termux_keys() {

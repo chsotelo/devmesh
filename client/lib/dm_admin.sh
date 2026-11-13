@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # Devices (via the hub's restricted dmadmin account), Wake-on-LAN, self-update, menu.
 
-dm_devices() { ssh -o ConnectTimeout=6 hub-admin ls; }
+dm_devices() { ssh -n -o ConnectTimeout=6 hub-admin ls; }
 
 # dm_copy TEXT — put TEXT on the clipboard when the platform has one.
 dm_copy() {
@@ -46,7 +46,7 @@ dm_add() {
   args=(invite "$name")
   [[ -n $lan ]] && args+=(--lan "$lan")
   ((watch)) && args+=(--watch-hub)
-  out=$(ssh -o ConnectTimeout=6 hub-admin "${args[@]}") || dm_die "the hub refused the invite (see the message above)"
+  out=$(ssh -n -o ConnectTimeout=6 hub-admin "${args[@]}") || dm_die "the hub refused the invite (see the message above)"
   join=$(sed -n 's/^JOIN: //p' <<<"$out")
   [[ -n $join ]] || dm_die "unexpected answer from the hub"
   printf '\n%s\n\n' "$(grep -v '^JOIN: ' <<<"$out" | sed '/^$/d')" >&2
@@ -69,7 +69,7 @@ dm_rm() {
   # Before the hub forgets it: the machines that are online drop its Herdr app key too. The
   # key only ever worked from the device's mesh address, which the hub stops routing below.
   dm_herdr_revoke "$name" >/dev/null 2>&1 || dm_info "some machines were offline: their Herdr key for $name goes on: dm herdr revoke $name"
-  ssh -o ConnectTimeout=6 hub-admin remove "$name" --confirm "$name"
+  ssh -n -o ConnectTimeout=6 hub-admin remove "$name" --confirm "$name"
   dm_refresh >/dev/null 2>&1 || true
 }
 

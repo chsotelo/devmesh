@@ -7,6 +7,17 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-11-13
+
+### Fixed
+
+- `dm approve`, `dm add`, `dm rm`, `dm devices`, `dm trust` and `dm update`: their read-only
+  `ssh` calls to the hub read stdin, so an answer passed through a pipe (the fingerprint tail)
+  was swallowed and the check failed. They now use `ssh -n`.
+- Joining from a fresh Termux could look stuck: its first package upgrade may ask whether to
+  replace a config file, and that question was hidden. The output stays visible and existing
+  config files are kept without asking.
+
 ## [0.13.0] - 2026-11-13
 
 devmesh is now the network under Herdr (https://herdr.dev): it reaches, wakes and joins your
