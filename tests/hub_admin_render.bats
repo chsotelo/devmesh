@@ -197,3 +197,9 @@ admin() { SSH_ORIGINAL_COMMAND=$1 devmesh _ssh "${2:-tablet}"; }
   DEVMESH_NOW=$(($(date +%s) + 601)) admin "notify claude redi wait" lap
   [ "$(grep -c '^curl ' "$STUB_LOG")" -eq 4 ]
 }
+
+@test "admin: a device cannot dodge the notify limit with new project names" {
+  export NTFY_URL=https://hub.example.test NTFY_TOKEN=tk_test NOTIFY_BURST=3
+  for p in a1 a2 a3 a4 a5 a6; do admin "notify claude $p perm" lap; done
+  [ "$(grep -c '^curl .*Title: Claude on lap' "$STUB_LOG")" -eq 3 ]
+}

@@ -136,7 +136,8 @@ owner_sign() { sign "$HOME/.ssh/id_devmesh" "$@"; }
   c=$(owner_sign client lap "$(pubof "$K/lap-client")")
   run admin "approve lap" <<<"client $c" lap
   [ "$status" -ne 0 ]
-  [[ $output == *"only an approver"* ]]
+  # lap is still pending: it is refused before the approver check even runs.
+  [[ $output == *"pending approval"* ]]
   s=$(owner_sign client tablet "$(pubof "$HOME/.ssh/id_devmesh")")
   run admin "approve tablet" <<<"client $s"
   [ "$status" -ne 0 ]
@@ -909,6 +910,64 @@ epoch_bundle_line() { # KEYFILE SIGNER SERIAL LISTFILE
   [ "$(cut -d' ' -f1 "$AL.epoch")" = 1 ]
 }
 
+@test "revoke: a fresh device accepts a revocation signed by an approver that was revoked later" {
+  mk_approvers
+  b=$(pubof "$K/b/k")
+  c=$(pubof "$K/newc")
+  printf 'pc %s\nbob %s\n' "$c" "$b" >"$BATS_TEST_TMPDIR/list"
+  {
+    printf 'signer bob %s %s\n' "$b" "$(tr_sign "$K/a/k" "$(tr_msg signer bob "$b")")"
+    printf 'client pc %s %s\n' "$c" "$(tr_sign "$K/b/k" "$(tr_msg client pc "$c")")"
+    printf 'revoke pc %s %s\n' "$c" "$(tr_sign "$K/b/k" "$(tr_msg revoke pc "$c")")"
+    printf 'revoke bob %s %s\n' "$b" "$(tr_sign "$K/a/k" "$(tr_msg revoke bob "$b")")"
+    epoch_bundle_line "$K/a/k" alice 2 "$BATS_TEST_TMPDIR/list"
+  } >"$BATS_TEST_TMPDIR/bundle"
+  out=$(tr_process_bundle "$AL" "$BATS_TEST_TMPDIR/bundle" 1 2>/dev/null)
+  [[ $out != *"client pc"* ]]
+  ! grep -q '^bob ' "$AL"
+  grep -q "^pc $c" "$AL.revoked"
+  grep -q "^bob $b" "$AL.revoked"
+  [ "$(cut -d' ' -f1 "$AL.epoch")" = 2 ]
+}
+
+@test "revoke: a revocation set is not vouched for by an epoch signed by an untrusted key" {
+  mk_approvers
+  a=$(pubof "$K/a/k")
+  printf 'alice %s\n' "$a" >"$BATS_TEST_TMPDIR/list"
+  {
+    printf 'revoke alice %s %s\n' "$a" "$(tr_sign "$K/b/k" "$(tr_msg revoke alice "$a")")"
+    epoch_bundle_line "$K/b/k" bob 1 "$BATS_TEST_TMPDIR/list"
+  } >"$BATS_TEST_TMPDIR/bundle"
+  run tr_process_bundle "$AL" "$BATS_TEST_TMPDIR/bundle" 1
+  [ "$status" -eq 0 ]
+  grep -q '^alice ' "$AL"
+  [ ! -s "$AL.revoked" ]
+}
+
+@test "revoke: a key on the local revocation list never verifies, even if allowed_signers still has it" {
+  mk_approvers
+  b=$(pubof "$K/b/k")
+  tr_allowed_line bob "$b" >>"$AL"
+  s=$(tr_sign "$K/b/k" "$(tr_msg bundle 9.9.9 deadbeef)")
+  run tr_verify "$AL" "$s" "$(tr_msg bundle 9.9.9 deadbeef)"
+  [ "$status" -eq 0 ]
+  printf 'bob %s\n' "$b" >"$AL.revoked"
+  run tr_verify "$AL" "$s" "$(tr_msg bundle 9.9.9 deadbeef)"
+  [ "$status" -ne 0 ]
+}
+
+@test "re-pin: a revoked approver the hub still lists is not re-admitted" {
+  mk_approvers
+  a=$(pubof "$K/a/k")
+  b=$(pubof "$K/b/k")
+  printf 'bob %s\n' "$b" >"$AL.revoked"
+  printf 'alice\t%s\towner\nbob\t%s\t%s\n' "$a" "$b" "$(tr_sign "$K/a/k" "$(tr_msg signer bob "$b")")" >"$BATS_TEST_TMPDIR/signers"
+  run tr_import_signers "$BATS_TEST_TMPDIR/signers" "$AL" "$a"
+  [ "$status" -eq 0 ]
+  grep -q '^alice ' "$AL"
+  ! grep -q '^bob ' "$AL"
+}
+
 @test "revoke: a revocation signed by nobody trusted is ignored (and without it no epoch is needed)" {
   mk_approvers
   printf 'revoke alice %s %s\n' "$(pubof "$K/a/k")" "$(tr_sign "$K/b/k" "$(tr_msg revoke alice "$(pubof "$K/a/k")")")" >"$BATS_TEST_TMPDIR/bundle"
@@ -1273,4 +1332,54 @@ $(min_cfg hub.example.test)"
   run dm_refresh
   [ "$status" -eq 0 ]
   grep -q 'devmesh-%n-%C' "$HOME/.ssh/config.d/devmesh"
+}
+
+@test "admin: a device pending approval can only read and remove itself once the hub has approvers" {
+  enroll_owner
+  enroll_dev lap machine
+  enroll_dev evil phone
+  for cmd in 'remove lap --confirm lap' 'invite x' 'notify claude p perm' 'backup-latest'; do
+    run admin "$cmd" evil
+    [ "$status" -ne 0 ] || {
+      echo "allowed: $cmd"
+      return 1
+    }
+    [[ $output == *"pending approval"* ]]
+  done
+  reg lap 1 | grep -qx lap
+  run admin "ls" evil
+  [ "$status" -eq 0 ]
+  run admin "remove evil --confirm evil" evil
+  [ "$status" -eq 0 ]
+  ! reg evil 1 | grep -q .
+}
+
+@test "admin: only an approver removes another device; the owner can" {
+  enroll_owner
+  enroll_dev lap machine
+  enroll_dev pc phone
+  # pc approved as a client but not an approver
+  cfp=$(tr_fingerprint "$(pubof "$K/pc-client")")
+  dm_approve pc <<<"${cfp: -16}" >/dev/null
+  [[ $(sig_col pc) != -* ]]
+  run admin "remove lap --confirm lap" pc
+  [ "$status" -ne 0 ]
+  [[ $output == *"only an approver"* ]]
+  run admin "remove lap --confirm lap" tablet
+  [ "$status" -eq 0 ]
+}
+
+@test "dm approve: a host-only approval does not record the hub's client key as approved" {
+  enroll_owner
+  enroll_dev lap machine
+  hfp=$(tr_fingerprint "$(pubof "$K/lap-host")")
+  cfp=$(tr_fingerprint "$(pubof "$K/lap-client")")
+  dm_approve lap <<<"${cfp: -16}"$'\n'"${hfp: -16}" >/dev/null
+  grep -q "^lap	$(pubof "$K/lap-client")" "$(dm_approved_log)"
+  : >"$(dm_approved_log)"
+  # A later host-only round (the hub says only the host key needs a signature) logs nothing.
+  row=$(printf 'lap\tmachine\t%s\t%s\tnow\thub\thost' "$(pubof "$K/pc-x" 2>/dev/null || new_ssh_pub "$K/pc-x")" "$(pubof "$K/lap-host")")
+  ssh() { [[ $* == *"hub-admin approve"* ]] && { cat >/dev/null; return 0; }; command ssh "$@"; }
+  dm_approve_send "$row" 0
+  [ ! -s "$(dm_approved_log)" ]
 }

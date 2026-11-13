@@ -21,7 +21,22 @@ cmd_admin_ssh() {
   # shellcheck disable=SC2034 # read by cmd_approve
   ADMIN_CALLER=$caller
   audit "admin by $caller: ${words[*]}"
+  # Once the hub has approvers, a device still waiting for approval may only read and
+  # cancel itself: it must not remove others, invite, or push alerts to the owner.
+  if admin_caller_pending; then
+    case ${words[0]} in
+      ls | hosts | ssh-config | known-hosts | dist | version | pending | signers | bundle | help) ;;
+      remove) [[ ${words[1]:-} == "$caller" ]] || die "pending approval: only an approved device can do that" ;;
+      *) die "pending approval: only an approved device can do that" ;;
+    esac
+  fi
   admin_dispatch "${words[@]}"
+}
+
+# admin_caller_pending: the hub has approvers and the caller has not been approved yet.
+admin_caller_pending() {
+  signers_exist || return 1
+  [[ $(reg_field "$(reg_get "$ADMIN_CALLER")" sig) == -* ]]
 }
 
 admin_dispatch() {
@@ -55,9 +70,10 @@ admin_dispatch() {
 
 # notify claude <project> perm|wait: a Claude Code session on the caller needs the user.
 # The text is fixed here: a device only picks which message is sent and a plain project name.
-# The same message is sent at most once per NOTIFY_EVERY (Claude repeats its idle prompt).
+# The same message is sent at most once per NOTIFY_EVERY (Claude repeats its idle prompt), and
+# a device sends at most NOTIFY_BURST messages per NOTIFY_EVERY whatever project names it uses.
 cmd_admin_notify() {
-  local text tags stamp last now
+  local text tags stamp last now budget recent
   (($# == 3)) && [[ $1 == claude && $2 =~ ^[a-z0-9_-]{1,30}$ ]] || die "usage: notify claude <project> perm|wait"
   case $3 in
     perm) text="Claude needs your permission" tags=warning ;;
@@ -69,6 +85,10 @@ cmd_admin_notify() {
   read -r last 2>/dev/null <"$stamp" || last=0
   ((now - last >= NOTIFY_EVERY)) || return 0
   mkdir -p "${stamp%/*}"
+  budget="$DEVMESH_STATE/notify/$ADMIN_CALLER.sent"
+  recent=$(awk -v t="$((now - NOTIFY_EVERY))" '$1 ~ /^[0-9]+$/ && $1 > t' "$budget" 2>/dev/null || true)
+  (($(grep -c . <<<"$recent") < ${NOTIFY_BURST:-5})) || return 0
+  printf '%s\n%s\n' "$recent" "$now" | grep . >"$budget"
   printf '%s\n' "$now" >"$stamp"
   notify "Claude on $ADMIN_CALLER: $2" "$text" "$tags"
 }

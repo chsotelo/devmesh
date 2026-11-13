@@ -176,7 +176,11 @@ dm_approve_send() {
     payload+="signer $s"$'\n'
   fi
   printf '%s' "$payload" | ssh -o ConnectTimeout=6 hub-admin approve "$name" >/dev/null || dm_die "the hub refused the approval of $name"
-  printf '%s\t%s\n' "$name" "$cpub" >>"$(dm_approved_log)" 2>/dev/null || true
+  # dm rm later revokes from this log without asking: record only a key whose tail the user
+  # typed and this device signed (a host-only approval never confirmed the hub's client key).
+  if [[ $need == client* ]] || ((as_signer)); then
+    printf '%s\t%s\n' "$name" "$cpub" >>"$(dm_approved_log)" 2>/dev/null || true
+  fi
   dm_info "approved $name"
 }
 

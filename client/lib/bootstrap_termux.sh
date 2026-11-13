@@ -42,6 +42,19 @@ termux_install_client() {
   printf '%s\n' "$DM_VERSION" >"$share/VERSION"
   bs_ensure_line "$HOME/.bashrc" "[ -r $share/shell/devmesh.sh ] && . $share/shell/devmesh.sh"
   termux_extra_keys
+  termux_sweep_wg_conf
+}
+
+# A join that Android killed during the WireGuard import (SIGKILL skips the EXIT trap) leaves
+# the config, private key included, in shared storage. Every install and dm update removes it.
+termux_sweep_wg_conf() {
+  local f
+  [[ -d $TX_DOWNLOADS ]] || return 0
+  for f in "$TX_DOWNLOADS"/devmesh-*.conf; do
+    [[ -f $f ]] || continue
+    grep -q '^PrivateKey' "$f" 2>/dev/null || continue
+    rm -f "$f" && bs_log "removed a leftover $f (it held this device's WireGuard key)"
+  done
 }
 
 # Touch-friendly keys row for Claude/Codex TUIs (Esc, Ctrl, Tab, arrows, paging). Only added

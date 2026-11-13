@@ -30,12 +30,24 @@ tr_sign() {
   printf '%s\n' "$2" | ssh-keygen -Y sign -f "$1" -n "$TR_NS" 2>/dev/null | base64 | tr -d '\n'
 }
 
+# tr_without_revoked ALLOWED REVOKED — the allowed_signers lines whose key is not in REVOKED.
+tr_without_revoked() {
+  if [[ -s $2 ]]; then
+    awk 'NR == FNR {r[$2 " " $3] = 1; next} !(($3 " " $4) in r)' "$2" "$1"
+  else
+    cat "$1"
+  fi
+}
+
 # tr_verify ALLOWED SIG_B64 MESSAGE — prints the approver that signed and succeeds, or fails.
+# A key on ALLOWED's local revocation list never verifies, whatever ALLOWED itself contains.
 tr_verify() {
   local allowed=$1 sig=$2 msg=$3 work principal rc=1
   tr_valid_sig "$sig" && [[ -s $allowed ]] || return 1
   work=$(mktemp -d) || return 1
-  if printf '%s' "$sig" | base64 -d >"$work/sig" 2>/dev/null; then
+  tr_without_revoked "$allowed" "$(tr_revoked_file "$allowed")" >"$work/allowed"
+  allowed=$work/allowed
+  if [[ -s $allowed ]] && printf '%s' "$sig" | base64 -d >"$work/sig" 2>/dev/null; then
     while read -r principal; do
       if printf '%s\n' "$msg" | ssh-keygen -Y verify -f "$allowed" -I "$principal" -n "$TR_NS" -s "$work/sig" >/dev/null 2>&1; then
         printf '%s\n' "$principal"
@@ -100,6 +112,77 @@ tr_epoch_state() {
   fi
 }
 
+# tr_is_revoked WORK "TYPE KEY" — the key is on WORK/revoked.
+tr_is_revoked() { awk -v k="$2" '$2 " " $3 == k {f = 1} END {exit !f}' "$1/revoked"; }
+
+# tr_converge WORK — approvers and revocations converge together: a revocation may be signed by an
+# approver that only this bundle introduces (a device that was offline), and a revoked key may not
+# be (re)admitted. Repeats until nothing changes. Updates WORK/cur and WORK/revoked.
+tr_converge() {
+  local work=$1 changed kind name key sig type k2
+  for _ in 1 2 3 4 5 6 7 8; do
+    changed=0
+    while IFS=$'\t' read -r kind name key sig; do
+      [[ $kind == revoke ]] || continue
+      tr_is_revoked "$work" "$key" && continue
+      if tr_verify "$work/cur" "$sig" "$(tr_msg revoke "$name" "$key")" >/dev/null; then
+        printf '%s %s\n' "$name" "$key" >>"$work/revoked"
+        printf 'devmesh: revoked key of %s\n' "$name" >&2
+        changed=1
+      fi
+    done <"$work/parsed"
+    while read -r _ type k2; do
+      [[ -n $type ]] || continue
+      grep -qF -- "$type $k2" "$work/cur" || continue
+      grep -vF -- "$type $k2" "$work/cur" >"$work/cur.new" || true
+      mv -f "$work/cur.new" "$work/cur"
+      changed=1
+    done <"$work/revoked"
+    while IFS=$'\t' read -r kind name key sig; do
+      [[ $kind == signer && $sig != owner ]] || continue
+      tr_is_revoked "$work" "$key" && continue
+      grep -qxF -- "$(tr_allowed_line "$name" "$key")" "$work/cur" && continue
+      if tr_verify "$work/cur" "$sig" "$(tr_msg signer "$name" "$key")" >/dev/null; then
+        tr_allowed_line "$name" "$key" >>"$work/cur"
+        changed=1
+      fi
+    done <"$work/parsed"
+    ((changed)) || break
+  done
+}
+
+# tr_best_epoch WORK SEEN_SERIAL -> "<serial> <hash>": the highest epoch in WORK/epochs signed by an
+# approver in WORK/cur ("0 <empty hash>" when none).
+tr_best_epoch() {
+  local work=$1 ss=$2 es=0 eh=$TR_EMPTY_HASH serial hash esigner esig who
+  while IFS=$'\t' read -r serial hash esigner esig; do
+    ((10#$serial > es)) || continue
+    # A hub cannot burn the serial space: at most 1000 ahead of the highest one seen.
+    ((10#$serial <= ss + 1000)) || continue
+    who=$(tr_verify "$work/cur" "$esig" "$(tr_msg epoch "$serial" "$hash")") || continue
+    [[ $who == "$esigner" ]] || continue
+    es=$((10#$serial))
+    eh=$hash
+  done <"$work/epochs"
+  printf '%s %s\n' "$es" "$eh"
+}
+
+# tr_vouch_revocations WORK HASH — when the verified revocations plus every revoke line of the bundle
+# hash to HASH (an epoch a current approver signed), take that set as WORK/revoked. Fails otherwise.
+tr_vouch_revocations() {
+  local work=$1 hash=$2 kind name key sig
+  [[ $hash != "$TR_EMPTY_HASH" ]] || return 1
+  cp "$work/revoked" "$work/vouched"
+  while IFS=$'\t' read -r kind name key sig; do
+    [[ $kind == revoke ]] || continue
+    awk -v k="$key" '$2 " " $3 == k {f = 1} END {exit !f}' "$work/vouched" && continue
+    printf '%s %s\n' "$name" "$key" >>"$work/vouched"
+  done <"$work/parsed"
+  [[ $(tr_rev_hash "$work/vouched") == "$hash" ]] || return 1
+  printf 'devmesh: revocations accepted through the signed epoch\n' >&2
+  mv -f "$work/vouched" "$work/revoked"
+}
+
 # tr_process_bundle ALLOWED BUNDLE [WRITE] — verify a hub bundle against the local
 # allowed_signers. Prints one "<kind> <name> <pubkey>" line per VERIFIED entry (kind: signer |
 # client | host); what fails is dropped and logged on stderr, malformed lines are skipped and
@@ -114,8 +197,8 @@ tr_epoch_state() {
 # epoch; an empty allowed_signers is never written.
 # Status: 0 ok, 2 no valid line at all, 3 no allowed_signers, 4 rejected by the epoch check.
 tr_process_bundle() {
-  local allowed=$1 bundle=$2 write=${3:-0} work line kind name type k2 sig extra key changed signer_keys
-  local revfile valid=0 total=0 serial hash esigner esig es eh ss sh who out=""
+  local allowed=$1 bundle=$2 write=${3:-0} work line kind name type k2 sig extra key signer_keys
+  local revfile valid=0 total=0 serial hash esigner esig es eh ss sh out=""
   [[ -s $allowed ]] || return 3
   work=$(mktemp -d) || return 2
   cp "$allowed" "$work/cur"
@@ -153,57 +236,22 @@ tr_process_bundle() {
     return 2
   fi
 
-  # Approvers and revocations converge together: a revocation may be signed by an approver that
-  # only this bundle introduces (a device that was offline), and a revoked key may not be
-  # (re)admitted. Repeat until nothing changes.
   read -r ss sh <<<"$(tr_epoch_state "$allowed")"
-  for _ in 1 2 3 4 5 6 7 8; do
-    changed=0
-    while IFS=$'\t' read -r kind name key sig; do
-      [[ $kind == revoke ]] || continue
-      awk -v k="$key" '$2 " " $3 == k {f = 1} END {exit !f}' "$work/revoked" && continue
-      if tr_verify "$work/cur" "$sig" "$(tr_msg revoke "$name" "$key")" >/dev/null; then
-        printf '%s %s\n' "$name" "$key" >>"$work/revoked"
-        printf 'devmesh: revoked key of %s\n' "$name" >&2
-        changed=1
-      fi
-    done <"$work/parsed"
-    while read -r _ type k2; do
-      [[ -n $type ]] || continue
-      grep -qF -- "$type $k2" "$work/cur" || continue
-      grep -vF -- "$type $k2" "$work/cur" >"$work/cur.new" || true
-      mv -f "$work/cur.new" "$work/cur"
-      changed=1
-    done <"$work/revoked"
-    while IFS=$'\t' read -r kind name key sig; do
-      [[ $kind == signer && $sig != owner ]] || continue
-      awk -v k="$key" '$2 " " $3 == k {f = 1} END {exit !f}' "$work/revoked" && continue
-      grep -qxF -- "$(tr_allowed_line "$name" "$key")" "$work/cur" && continue
-      if tr_verify "$work/cur" "$sig" "$(tr_msg signer "$name" "$key")" >/dev/null; then
-        tr_allowed_line "$name" "$key" >>"$work/cur"
-        changed=1
-      fi
-    done <"$work/parsed"
-    ((changed)) || break
-  done
+  tr_converge "$work"
+  read -r es eh <<<"$(tr_best_epoch "$work" "$ss")"
+  # A revocation signed by an approver that was itself revoked later cannot be verified by a device
+  # that never trusted that approver (a fresh one). The epoch, signed by a CURRENT approver, commits
+  # to the whole revocation set, so that approver vouches for every entry in it.
+  if [[ $(tr_rev_hash "$work/revoked") != "$eh" ]] && tr_vouch_revocations "$work" "$eh"; then
+    tr_converge "$work"
+    read -r es eh <<<"$(tr_best_epoch "$work" "$ss")"
+  fi
   while IFS=$'\t' read -r kind name key sig; do
     [[ $kind == revoke ]] || continue
-    awk -v k="$key" '$2 " " $3 == k {f = 1} END {exit !f}' "$work/revoked" ||
+    tr_is_revoked "$work" "$key" ||
       printf 'devmesh: dropped revocation of %s: no valid approver signature\n' "$name" >&2
   done <"$work/parsed"
 
-  # Revocation epoch: highest validly signed serial in the bundle against the highest seen.
-  es=0
-  eh=$TR_EMPTY_HASH
-  while IFS=$'\t' read -r serial hash esigner esig; do
-    ((10#$serial > es)) || continue
-    # A hub cannot burn the serial space: at most 1000 ahead of the highest one seen.
-    ((10#$serial <= ss + 1000)) || continue
-    who=$(tr_verify "$work/cur" "$esig" "$(tr_msg epoch "$serial" "$hash")") || continue
-    [[ $who == "$esigner" ]] || continue
-    es=$((10#$serial))
-    eh=$hash
-  done <"$work/epochs"
   if ((es < ss)) || { ((es == ss && ss > 0)) && [[ $eh != "$sh" ]]; } || [[ $(tr_rev_hash "$work/revoked") != "$eh" ]]; then
     printf 'devmesh: bundle rejected: revocation epoch %s (seen %s) or revocation set does not match the signed one\n' "$es" "$ss" >&2
     rm -rf "$work"
@@ -271,7 +319,7 @@ tr_process_bundle() {
 # Every other row is accepted only through a valid signature chain from that root (same rule as
 # bundles); a second "owner" row is never trusted. Writes ALLOWED.
 tr_import_signers() {
-  local file=$1 allowed=$2 root=${3:-} work name type k2 proof owners=0 rootline=""
+  local file=$1 allowed=$2 root=${3:-} work name type k2 proof owners=0 rootline="" revfile
   work=$(mktemp -d) || return 1
   : >"$work/bundle"
   while read -r name type k2 proof; do
@@ -290,7 +338,11 @@ tr_import_signers() {
   fi
   if [[ -n $rootline ]]; then
     printf '%s\n' "$rootline" >"$work/start"
-    tr_process_bundle "$work/start" "$work/bundle" 1 >/dev/null 2>&1 && cp "$work/start" "$allowed"
+    # The caller's revocations stay in force: a re-pin must not re-admit a revoked approver.
+    revfile=$(tr_revoked_file "$allowed")
+    if tr_process_bundle "$work/start" "$work/bundle" 1 >/dev/null 2>&1; then
+      tr_without_revoked "$work/start" "$revfile" >"$work/start.ok" && cp "$work/start.ok" "$allowed"
+    fi
   fi
   rm -rf "$work"
   [[ -s $allowed ]]

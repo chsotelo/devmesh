@@ -229,3 +229,13 @@ setup() { setup_hub; }
   run devmesh invite tablet --phone --watch-hub
   [ "$status" -ne 0 ]
 }
+
+@test "remove: a freed address is not handed to the next device while others are free" {
+  enroll_machine lap
+  enroll_phone tablet
+  old=$(awk -F'\t' '$1 == "tablet" {print $3}' "$DEVMESH_ETC/registry.tsv")
+  devmesh remove tablet --confirm tablet >/dev/null
+  enroll_phone phone2
+  new=$(awk -F'\t' '$1 == "phone2" {print $3}' "$DEVMESH_ETC/registry.tsv")
+  [ -n "$new" ] && [ "$new" != "$old" ]
+}

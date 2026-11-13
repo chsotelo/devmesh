@@ -101,3 +101,15 @@ stub_reload() {
   grep -q 'DEBIAN_FRONTEND=noninteractive install -y .*--force-confold.* wireguard-tools' "$BATS_TEST_TMPDIR/pkg.log"
   ! grep -q 'read stdin' "$BATS_TEST_TMPDIR/pkg.log"
 }
+
+@test "termux: install removes a leftover WireGuard config with a private key from Download" {
+  export TX_DOWNLOADS="$BATS_TEST_TMPDIR/dl"
+  mkdir -p "$TX_DOWNLOADS"
+  printf '[Interface]\nPrivateKey = AAAA\n' >"$TX_DOWNLOADS/devmesh-phone.conf"
+  printf 'unrelated\n' >"$TX_DOWNLOADS/devmesh-notes.conf"
+  printf 'photo' >"$TX_DOWNLOADS/pic.jpg"
+  run bash -c "source '$REPO/client/lib/bootstrap_termux.sh'; termux_sweep_wg_conf"
+  [ "$status" -eq 0 ]
+  [ ! -e "$TX_DOWNLOADS/devmesh-phone.conf" ]
+  [ -e "$TX_DOWNLOADS/devmesh-notes.conf" ] && [ -e "$TX_DOWNLOADS/pic.jpg" ]
+}
