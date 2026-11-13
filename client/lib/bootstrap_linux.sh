@@ -65,12 +65,11 @@ linux_install_client() {
   install -d "$BS_PREFIX/bin" "$BS_PREFIX/sbin" "$BS_PREFIX/share/devmesh"
   install -m 0755 "$DM_DIST_DIR/bin/dm" "$BS_PREFIX/bin/dm"
   install -m 0755 "$DM_DIST_DIR/sbin/devmesh-node" "$DM_DIST_DIR/sbin/devmesh-node-fw" "$BS_PREFIX/sbin/"
-  rm -rf "$BS_PREFIX/share/devmesh/lib" "$BS_PREFIX/share/devmesh/tmux" \
-    "$BS_PREFIX/share/devmesh/shell" "$BS_PREFIX/share/devmesh/hooks"
-  cp -R "$DM_DIST_DIR/lib" "$DM_DIST_DIR/tmux" "$DM_DIST_DIR/shell" "$DM_DIST_DIR/hooks" "$BS_PREFIX/share/devmesh/"
+  rm -rf "$BS_PREFIX/share/devmesh/lib" "$BS_PREFIX/share/devmesh/tmux" "$BS_PREFIX/share/devmesh/shell"
+  bs_remove_legacy "$BS_PREFIX/share/devmesh"
+  cp -R "$DM_DIST_DIR/lib" "$DM_DIST_DIR/tmux" "$DM_DIST_DIR/shell" "$BS_PREFIX/share/devmesh/"
   printf '%s\n' "$DM_VERSION" >"$BS_PREFIX/share/devmesh/VERSION"
   chmod -R u=rwX,go=rX "$BS_PREFIX/share/devmesh"
-  bs_install_tui "$DM_DIST_DIR/bin" "$BS_PREFIX/share/devmesh/bin"
   install -d "$BS_SYSTEMD/system" "$BS_SYSTEMD/user"
   install -m 0644 "$DM_DIST_DIR"/systemd/* "$BS_SYSTEMD/system/"
   install -m 0644 "$DM_DIST_DIR"/systemd-user/* "$BS_SYSTEMD/user/"
@@ -83,23 +82,20 @@ linux_enable_update() {
   systemctl enable --now devmesh-update.timer >/dev/null 2>&1 || bs_log "could not enable devmesh-update.timer"
   systemctl enable --now devmesh-lan.timer >/dev/null 2>&1 || bs_log "could not enable devmesh-lan.timer"
   systemctl start devmesh-lan.service >/dev/null 2>&1 || true
-  linux_enable_reap
+  linux_remove_reap
 }
 
-# Idle Claude sessions stop by themselves: a user timer, enabled for every user (--global) and
-# started now in each user manager that is already running (lingering users), so machines
-# enrolled before this existed get it on "dm update". Never fatal.
-linux_enable_reap() {
+# The Claude idle-reaper timer of clients before 0.13 (Herdr runs the sessions now): disabled
+# for every user, stopped where a user manager runs, its unit files removed. Never fatal.
+linux_remove_reap() {
   local uid user
-  systemctl --global enable devmesh-claude-reap.timer >/dev/null 2>&1 || {
-    bs_log "could not enable devmesh-claude-reap.timer"
-    return 0
-  }
+  [[ -e $BS_SYSTEMD/user/devmesh-claude-reap.timer ]] || return 0
+  systemctl --global disable devmesh-claude-reap.timer >/dev/null 2>&1 || true
   while read -r uid user; do
     [[ ${uid:-} =~ ^[0-9]+$ && -d /run/user/$uid && $uid -ge 1000 ]] || continue
-    sudo -u "$user" XDG_RUNTIME_DIR="/run/user/$uid" systemctl --user daemon-reload >/dev/null 2>&1 || true
-    sudo -u "$user" XDG_RUNTIME_DIR="/run/user/$uid" systemctl --user start devmesh-claude-reap.timer >/dev/null 2>&1 || true
+    sudo -u "$user" XDG_RUNTIME_DIR="/run/user/$uid" systemctl --user stop devmesh-claude-reap.timer >/dev/null 2>&1 || true
   done < <(loginctl list-users --no-legend 2>/dev/null | awk '{print $1, $2}')
+  rm -f "$BS_SYSTEMD/user/devmesh-claude-reap.timer" "$BS_SYSTEMD/user/devmesh-claude-reap.service"
 }
 
 # WireGuard interface name of this machine: node.conf, else the enrollment environment.
@@ -428,9 +424,9 @@ bootstrap_main() {
   linux_services
   linux_auto_updates
   linux_user_setup "$user" "$home"
-  linux_enable_reap
+  linux_remove_reap
   printf '\n\033[32m%s ✓\033[0m  wg %s · tunnel :%s · color %s · key %s\n' "$DM_NAME" "$DM_IP" "$DM_PORT" \
     "$DM_COLOR" "$(ssh-keygen -lf "$home/.ssh/id_devmesh.pub" | awk '{print $2}')"
   bs_approve_hint "$home/.ssh/id_devmesh.pub" "$BS_SSHD_DIR/ssh_host_ed25519_key.pub"
-  printf 'Next: open a new terminal (it starts inside tmux) or run "dm".\n'
+  printf 'Next: "dm help". Terminals and agents on this machine: Herdr (https://herdr.dev), optional.\n'
 }

@@ -216,32 +216,10 @@ dm_host_field() {
 
 dm_machines() { dm_hosts machine | cut -f1; }
 
-# dm_is_workspace_host NAME — no "| grep -q": under pipefail an early match makes the
-# writer die of SIGPIPE and the whole test fail.
-dm_is_workspace_host() {
-  local hosts
-  hosts=$'\n'$(dm_workspace_hosts)$'\n'
-  [[ -n ${1:-} && $hosts == *$'\n'"$1"$'\n'* ]]
-}
-
-# The tabs of the workspace: this device first (its own terminals, when it has tmux), then
-# every other machine.
-dm_workspace_hosts() {
-  local self=${DM_NAME:-} m
-  if [[ $self =~ ^[a-z][a-z0-9-]{0,15}$ ]] && command -v tmux >/dev/null; then
-    printf '%s\n' "$self"
-  fi
-  for m in $(dm_machines); do
-    [[ $m == "$self" ]] || printf '%s\n' "$m"
-  done
-}
-
-# Terminals live on Linux machines; say so (and how to add one) instead of an empty list.
+# No machines enrolled: say so, and how to add one, instead of an empty list.
 dm_require_machines() {
   [[ -n $(dm_machines) ]] && return 0
-  dm_die "no machines yet. Terminals live on your Linux machines (laptop, PCs).
-  Add one: dm add lap   → then paste the printed line on that machine.
-  Your Mac and phones are controls: they open terminals on machines."
+  dm_die "no machines yet. Add one: dm add pc   → then paste the printed line on that machine."
 }
 
 # --- Paths A/B -----------------------------------------------------------------
@@ -465,28 +443,6 @@ dm_tty() {
 dm_dot() { printf '\033[38;5;%sm●\033[0m' "${1/#-/244}"; }
 dm_grey() { printf '\033[38;5;244m%s\033[0m' "$*"; }
 
-dm_ago() {
-  local then=$1 now delta
-  [[ $then =~ ^[0-9]+$ && $then -gt 0 ]] || {
-    printf -- '-'
-    return
-  }
-  now=$(date +%s)
-  delta=$((now - then))
-  ((delta < 0)) && delta=0
-  if ((delta < 60)); then
-    printf '%ss' "$delta"
-  elif ((delta < 3600)); then
-    printf '%sm' $((delta / 60))
-  elif ((delta < 86400)); then
-    printf '%sh' $((delta / 3600))
-  else
-    printf '%sd' $((delta / 86400))
-  fi
-}
-
-dm_narrow() { (("${FZF_COLUMNS:-${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}}" < 60)); }
-
 # Session names: tmux forbids "." and ":"; keep them short and shell-safe.
 dm_sanitize() {
   local s=${1,,}
@@ -514,4 +470,40 @@ dm_confirm() {
   printf 'Type "%s" to confirm: ' "$expect" >&2
   read -r answer
   [[ $answer == "$expect" ]]
+}
+
+# dm_pick_machine PROMPT — only reachable machines can be chosen.
+dm_pick_machine() (
+  prompt=$1
+  dm_require_machines
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' EXIT
+  local h lines="" color
+  for h in $(dm_machines); do
+    (dm_path "$h" >/dev/null 2>&1 && : >"$tmp/$h") &
+  done
+  wait
+  for h in $(dm_machines); do
+    color=$(dm_host_field "$h" color)
+    if [[ -e $tmp/$h ]]; then
+      lines+="$h"$'\t'"$(dm_dot "$color") $h"$'\n'
+    else
+      lines+="-"$'\t'"$(dm_dot 244) $(dm_grey "$h (offline)")"$'\n'
+    fi
+  done
+  local pick
+  pick=$(printf '%s' "$lines" | dm_pick "$prompt" --delimiter=$'\t' --with-nth=2) || exit 1
+  pick=${pick%%$'\t'*}
+  [[ $pick != - ]] || dm_die "that machine is offline"
+  printf '%s\n' "$pick"
+)
+
+# dm go: a plain terminal on a machine (tmux session, "main" by default): the fallback when
+# Herdr is not reachable (Termux, networks that only allow path B).
+dm_go() {
+  local host=${1:-} session=${2:-main}
+  dm_require_machines
+  [[ -n $host ]] || host=$(dm_pick_machine machine) || return 0
+  dm_valid_session "$session" || dm_die "invalid session name"
+  dm_tty "$host" "dm _attach $session - $DM_NAME"
 }

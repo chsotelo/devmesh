@@ -2,21 +2,21 @@
 
 ![ci](https://github.com/chsotelo/devmesh/actions/workflows/ci.yml/badge.svg)
 
-devmesh is a self-hosted control plane for your terminals across machines: a WireGuard
+devmesh is a private network, device trust and power control for your machines: a WireGuard
 network with a reverse-SSH fallback, joined with one line on Linux, macOS or Android
-(Termux), and driven from a live TUI panel. No accounts and no third-party cloud: the hub
-is a small server you own.
+(Termux). No accounts and no third-party cloud: the hub is a small server you own.
 
-![demo](docs/demo.gif)
+It does not run your terminals or agents. [Herdr](https://herdr.dev) does that, on top:
+devmesh reaches your machines, wakes them, and decides which devices are trusted.
 
 ## How it works
 
 ```
-  devices (control)             hub (your VPS)                machines (tmux)
+  devices                       hub (your VPS)                machines
   Mac · tablet · phone                                        Linux · macOS
   ┌──────────────┐   A: WireGuard (udp/51820)   ┌─────────┐   ┌─────────────┐
-  │     dm       │ ═══════════════════════════> │         │ ══> │ tmux sessions│
-  │  live panel  │                              │   hub   │   └─────────────┘
+  │     dm       │ ═══════════════════════════> │         │ ══> │ Herdr · ssh  │
+  │  Herdr app   │                              │   hub   │   └─────────────┘
   │              │   B: ssh (tcp/2222) ───────> │         │ <── reverse tunnel
   └──────────────┘      via the hub             └─────────┘     opened by each machine
 ```
@@ -26,7 +26,7 @@ is a small server you own.
 - **Path A, WireGuard:** devices reach machines over the private network, through the hub.
 - **Path B, reverse SSH:** each machine keeps a tunnel open to the hub. When UDP is
   blocked, `dm` goes through the hub over SSH. It tries A first and falls back to B by itself.
-- Terminals live in tmux on each machine, so they survive disconnects.
+- Herdr, `dm use` and `dm go` all travel over these paths.
 
 ## Requirements
 
@@ -35,7 +35,7 @@ is a small server you own.
 | Hub | Ubuntu 20.04+ or Debian 11+ (native install), or any Linux with Docker. 1 vCPU, 512 MB. UDP 51820 and TCP 2222 open, plus TCP 443 (domain mode) or TCP 8443 (IP mode). A domain also needs port 80 for the Let's Encrypt challenge |
 | Machines | Linux with systemd, or macOS 13+ with Homebrew |
 | Phone / tablet | Android with Termux from F-Droid |
-| Panel | tmux 3.2 or newer for the workspace. The list is `dm-tui`, a prebuilt binary that ships with the client (macOS, Linux, Termux); without it, with an older tmux, or with `DM_UI=fzf`, `dm` uses the fzf panel (fzf 0.66 or newer; older fzf: classic menu) |
+| Herdr (optional) | `herdr-core` on each machine you drive with `dm use` or the Herdr app. devmesh never installs it. `dm go` needs tmux instead |
 
 ## Install the hub
 
@@ -82,123 +82,89 @@ Paste the `JOIN:` line on the new device. It works for Linux, macOS and Termux, 
 once and expires after 15 minutes. Linux machines ask for `sudo`; Termux asks you to
 import a WireGuard config into the WireGuard app.
 
-## Use the panel
+## Herdr on top
 
-`dm` opens the terminal panel of VS Code, on tmux: **a tab per machine on top (the device
-selector), the machine's terminals as a list on the left, the real terminal on the right.**
+devmesh gets you to the machine; [Herdr](https://herdr.dev) (desktop and mobile apps) runs the
+terminals and agents there. A typical use: keep a powerful PC asleep and start work on it from
+the laptop.
 
-```
- devmesh │ ● laptop  desktop  ○ builder                          + │ 🗑 │ ✕
-▎ >_ api              ● │ $ claude
-  >_ web                │   I updated the auth middleware and added tests.
-  >_ docs             ● │   Edit src/auth.ts?
+```sh
+dm use pc claude       # wakes pc if it is asleep, starts claude in a Herdr terminal on it
 ```
 
-- Top bar: the active machine is bright with its color dot, the rest gray, an off machine shows
-  `○`. Click or tap a tab to switch.
-- Claude sessions: the list shows the machine's Claude Code sessions by name, working or
-  idle. Stop one to free its memory, resume it later from `History ›`, start `＋ New`, or
-  `Move to` another machine so that machine does the work. Sessions idle for 2 h fall asleep in
-  their terminal (Enter resumes them); one closed by hand leaves `claude --resume …` typed at
-  the prompt. `⏻` suspends, powers off or wakes a machine when it
-  can be woken again.
-- Left list: one row per terminal with a dot for the agent in it (yellow waiting, blue working,
-  green idle). Click or `enter` shows it on the right; arrows or `j`/`k` move; it refreshes
-  every 3 s.
-- Buttons: `+` new terminal (asks for a name), `🗑` delete the terminal on screen (asks first),
-  `✕` leave (everything keeps running; `dm` re-attaches to the same place). Keys: `Ctrl+a +`,
-  `Ctrl+a x`, `Ctrl+a d`.
-- Under 70 columns (phone) the list is hidden and the terminal fills the screen; `☰` / `Ctrl+a s`
-  swaps to the list and back.
-- `DM_UI=cards dm` opens the previous card panel (below), `DM_UI=fzf dm` the fzf one; both are
-  also used automatically when there is no `dm-tui` binary or tmux is older than 3.2.
-- For screenshots and tests, `DM_DEMO=1` makes each terminal pane print the screen the ssh stub
-  returns instead of connecting (`docs/demo/run.sh`).
+Then watch and drive it in Herdr, on the desktop or on the phone. `dm use` needs `herdr-core` on
+the machine; if it is missing, devmesh says so and installs nothing.
 
-### Card panel (`DM_UI=cards`)
+- `dm use <machine> [--cwd DIR] [--attach] [-- command...]`: runs a command (default: a shell)
+  in a Herdr terminal on that machine. If the machine is asleep it sends Wake-on-LAN and waits
+  up to 180 s (`DM_USE_WAIT`). `--attach` attaches the terminal right here.
+- `dm power <machine> [status|wake|suspend|off]`: `status` shows on or off and what can be done.
+  `suspend` and `off` are offered only when another machine on its LAN can wake it again;
+  `off` asks you to type the machine's name.
+- `dm herdr allow <device> <ssh-public-key>`: lets the Herdr mobile app on that device sign in
+  to every machine. See below.
+- `dm go [machine] [name]`: a plain tmux terminal. Use it when Herdr is not reachable, for
+  example from Termux or on a network that only allows path B.
 
-The first tab is the panel, each open terminal gets a tab.
-The panel is an app-like screen made for touch: every machine is a section and every
-terminal is a card with its agent state (working, waiting, idle), who is attached, the last
-activity and a **live thumbnail of its screen**. The grid adapts to the screen: one column on
-a phone, two on a portrait tablet, more on a wide screen, where a **detail pane** with a big
-live view of the selected terminal appears from 140 columns. On a narrow screen, `enter` on a
-card opens the same detail full screen. Cards refresh every 4 seconds and the thumbnails of
-the cards in view every 3 seconds, without ever blocking the keyboard. Everything is
-tappable: cards (tap to select, tap again to open), the top-bar buttons and the machine
-buttons; the wheel scrolls.
+### Herdr mobile app
 
-```
- devmesh 0.8.1                 [new] [↻] [send] [web] [fetch] [devices]
- ● laptop  3 terminals                                           [new]
-╭─────────────────────────────────╮ ╭────────────────────────────────╮
-│ api                   ● waiting │ │ web                            │
-│ claude · tablet             40s │ │ node · laptop               5m │
-│ ── tablet ───────────────────── │ │ ────────────────────────────── │
-│ I updated the auth middleware … │ │ $ npm run dev                  │
-│ Edit src/auth.ts?               │ │ VITE v6 ready in 312 ms        │
-╰─────────────────────────────────╯ ╰────────────────────────────────╯
- ○ desktop  offline                                             [wake]
-                     enter open  n new  / filter  ? shortcuts  q quit
- tablet · 3 machines · 3 terminals · 1 waiting
-```
+Use only the official app from [herdr.dev/mobile](https://herdr.dev/mobile) (Google Play id
+`dev.herdr.app`). Third-party "Herdr Mobile" apps that ask to install a `herdr-mobile-bridge`
+talk to the Herdr TUI, not to `herdr-core`, and see nothing.
 
-| Key | Action |
-|---|---|
-| arrows · `h j k l` | move between cards and machines |
-| `enter` | open the terminal (wide screen) or its detail (narrow); a machine opens its menu; an offline one is woken |
-| `o` | open the selected terminal |
-| `n` | new terminal: machine, then project, or type a name |
-| `s` / `f` | send a file / fetch a file |
-| `w` | preview a machine's dev server locally |
-| `d` / `a` | list devices / add a device |
-| `r` | refresh |
-| `/` | filter the terminals |
-| `esc` | go back one screen; on the home screen clear the filter, then quit |
-| `?` | list the shortcuts |
-| `q` · `ctrl+c` | quit the panel |
-| `Ctrl+a p` / `Ctrl+a n` / `Ctrl+a d` | tmux workspace: panel tab / next tab / leave (everything keeps running) |
+1. The phone or tablet must be in the mesh with WireGuard on (the tunnel imported in the
+   WireGuard app when you joined it).
+2. In the app, add each machine by its mesh IP (`10.73.0.x`), port 22 and the machine's user.
+3. Choose "Add the key yourself". On a joined device run, with the line the app shows:
+   ```sh
+   dm herdr allow phone '<line from the app>'
+   ```
+   You can paste the whole line. The key goes to every machine's `~/.ssh/authorized_keys`,
+   tagged `devmesh-herdr:phone`, usable only from the phone's mesh IP and with no forwarding.
+   Machines that are offline are reported; run it again later, it is safe to repeat.
+4. Each machine needs `herdr-core` (it comes with the Herdr desktop app, or install it).
+5. macOS machines: devmesh's own sshd listens on localhost only, so the app needs macOS
+   Remote Login (System Settings > General > Sharing > Remote Login). Allow only your user,
+   turn off full disk access for remote users, and make the macOS sshd keys-only.
 
-The panel (`dm-tui`) only draws: everything that touches a machine still goes through
-`dm`. The panel is English by default. Spanish: `DM_LANG=es dm` (or a `LANG=es_*` locale).
-`DM_UI=fzf dm` (or `DM_TUI=0 dm`) runs the fzf panel instead.
+`dm herdr ls` lists the keys; `dm herdr revoke <device>` removes them. `dm rm <device>` also
+revokes that device's Herdr keys on the machines that are online.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `dm` | workspace: a tab per machine, its terminals on the left, the terminal on the right |
-| `dm new [machine]` | new terminal, guided |
-| `dm list` / `dm who` | every terminal on every machine, as a list / a table |
-| `dm go [machine] [name]` | enter a terminal (default `main`) |
-| `dm close` | close a terminal |
+| `dm use <machine> [--cwd DIR] [--attach] [-- command...]` | run a command in a Herdr terminal on a machine, waking it first |
+| `dm power <machine> [status\|wake\|suspend\|off]` | power state; suspend and off only when it can be woken again |
+| `dm herdr allow <device> <key>` / `revoke <device>` / `ls` | Herdr mobile app keys on every machine |
+| `dm go [machine] [name]` | plain tmux terminal (default `main`); fallback when Herdr is not reachable |
 | `dm send [file]` / `dm fetch` | send a file to a machine / bring one back |
 | `dm port [stop]` | preview a machine's dev server at `http://localhost:<port>` |
 | `dm mesh` | what this Linux machine exposes on the mesh (only SSH, mosh and ping by default) |
 | `dm add <name> [--lan L] [--watch-hub]` | join line for a new device |
 | `dm devices` / `dm rm` | list / revoke devices |
+| `dm approve` / `dm trust` | approve devices / signed trust (see the guide) |
 | `dm wake [machine]` | Wake-on-LAN through a machine on the same LAN |
 | `dm refresh` / `dm update` | pull device list and ssh config / update the client |
 | `dm repoint <ip\|host>` | follow the hub to a new address (checks its host key) |
-| `dm agent <state>` | for tool hooks: `working`, `waiting`, `idle`, `clear` |
-| `dm vscode on\|off\|status` | machines: VS Code terminals start inside tmux, visible from every device |
 | `dm notify on\|off\|status` | machines: a phone push (ntfy) when Claude Code asks for permission or waits for you |
 
-Hub side (as root): `devmesh invite|remove|ls|check|gc|backup|restore|apply|dist`.
+`dm` with no arguments prints help. Hub side (as root): `devmesh invite|remove|ls|check|gc|backup|restore|apply|dist`.
 
 ## How it compares
 
 | | devmesh | Tailscale + tmux | Headscale / NetBird | Claude Code Remote Control | Moshi / Termius |
 |---|---|---|---|---|---|
-| What it is | hub + client scripts for terminals | managed VPN you pair with your own tmux | self-hosted VPN control servers | official feature to drive a Claude Code session remotely | SSH/mosh terminal apps |
+| What it is | hub + client scripts: network, trust, power | managed VPN you pair with your own tmux | self-hosted VPN control servers | official feature to drive a Claude Code session remotely | SSH/mosh terminal apps |
 | Self-hosted | yes, all of it | coordination is a vendor service | yes | no (Anthropic service) | the app is not; your SSH servers are |
 | Network layer | WireGuard + SSH fallback | WireGuard (with relays) | WireGuard-based | not a network | your own network or VPN |
-| Terminal listing, tabs, send/fetch | built in | you assemble them | not their scope | one session per instance, ends when the terminal closes | per-host sessions |
-| Phone client | Termux (Android) | native apps | native apps | Claude apps | native apps (iOS/Android) |
+| Terminals and agents | Herdr on top; `dm go` as a plain fallback | you assemble them | not their scope | one session per instance, ends when the terminal closes | per-host sessions |
+| Send/fetch files, wake, power | built in | you assemble them | not their scope | no | no |
+| Phone client | Herdr mobile app; Termux (Android) | native apps | native apps | Claude apps | native apps (iOS/Android) |
 | Maturity | young, small | established | established | official | established |
 
-Pick the VPN products if you only need the network. devmesh covers the network and the
-terminal workflow on top, at the cost of running a hub.
+Pick the VPN products if you only need the network. devmesh covers the network, device trust and
+power, with Herdr on top for the terminals, at the cost of running a hub.
 
 ## Security model
 
@@ -217,10 +183,6 @@ vulnerability, see [SECURITY.md](SECURITY.md).
 brew install bash bats-core shellcheck shfmt age   # macOS
 make check             # shellcheck + shfmt + bats (stubs)
 make integration       # real hub and machines in Docker (needs Docker, internet)
-make tui              # build dm-tui for this machine into client/bin (needs Go)
-make tui-all          # ...for macOS, Linux and Android/Termux (arm64 and amd64)
-make tui-check        # go vet + gofmt + go tests of the Go panel
-make demo              # re-record docs/demo.gif (needs vhs; builds dm-tui)
 ```
 
 ## More

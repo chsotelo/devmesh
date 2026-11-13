@@ -7,4 +7,3 @@ PLAN-OSS.md
 dist/
 deploy.local.mk
 .claude/
-client/bin/dm-tui-*

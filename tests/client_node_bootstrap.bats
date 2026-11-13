@@ -418,39 +418,42 @@ refresh_env() {
   [[ -x /bin/bash && $(/bin/bash -c 'echo ${BASH_VERSINFO[0]}') -lt 4 ]] || skip "no bash 3 here"
   run env DM_CONF=/nonexistent /bin/bash "$REPO/client/bin/dm" help
   [ "$status" -eq 0 ]
-  [[ $output == *"dm new"* ]]
+  [[ $output == *"dm use"* ]]
 }
 
 @test "macOS: client install succeeds whether or not ~/.bashrc exists (set -e)" {
   export DM_DIST_DIR="$REPO/client" HOME="$BATS_TEST_TMPDIR/mh3" MX_SHARE="$BATS_TEST_TMPDIR/mh3/share" MX_BIN="$BATS_TEST_TMPDIR/mh3/bin" DM_VERSION=0.1.0
-  mkdir -p "$HOME" "$BATS_TEST_TMPDIR/stub"
+  mkdir -p "$HOME/Library/LaunchAgents" "$MX_SHARE/bin" "$MX_SHARE/hooks" "$BATS_TEST_TMPDIR/stub"
+  # What a client before 0.13 left behind: the Claude reaper agent and the Go panel binary.
+  touch "$HOME/Library/LaunchAgents/net.devmesh.claude-reap.plist" "$MX_SHARE/bin/dm-tui-darwin-arm64"
   printf '#!/bin/sh\necho "$@" >>"%s/launchctl.log"\n' "$BATS_TEST_TMPDIR" >"$BATS_TEST_TMPDIR/stub/launchctl"
   chmod +x "$BATS_TEST_TMPDIR/stub/launchctl"
   PATH="$BATS_TEST_TMPDIR/stub:$PATH" run bash -c "set -euo pipefail; source '$REPO/client/lib/bootstrap_macos.sh'; macos_install_client"
   [ "$status" -eq 0 ]
   grep -q 'devmesh.sh' "$HOME/.zshrc"
   [ ! -e "$HOME/.bashrc" ]
-  # The idle-session reaper agent: every 5 minutes, loaded on install/update.
-  p="$HOME/Library/LaunchAgents/net.devmesh.claude-reap.plist"
-  grep -q '<integer>300</integer>' "$p"
-  grep -q '<string>_claude_reap</string>' "$p"
-  grep -q 'net.devmesh.claude-reap' "$BATS_TEST_TMPDIR/launchctl.log"
-  if [[ $(uname -s) == Darwin ]]; then plutil -lint "$p"; fi
+  # The legacy agent is unloaded and removed, the panel binaries and hook examples are gone.
+  [ ! -e "$HOME/Library/LaunchAgents/net.devmesh.claude-reap.plist" ]
+  grep -q 'bootout gui/.*/net.devmesh.claude-reap' "$BATS_TEST_TMPDIR/launchctl.log"
+  [ ! -e "$MX_SHARE/bin" ] && [ ! -e "$MX_SHARE/hooks" ]
   [ -x "$MX_BIN/dm" ]
 }
 
-@test "Linux: the idle-session reaper is a user timer every 5 minutes, enabled for all users on update" {
-  u="$REPO/client/systemd-user"
-  grep -q '^ExecStart=/usr/local/bin/dm _claude_reap$' "$u/devmesh-claude-reap.service"
-  grep -q '^OnUnitActiveSec=5min$' "$u/devmesh-claude-reap.timer"
-  grep -q '^WantedBy=timers.target$' "$u/devmesh-claude-reap.timer"
-  run grep -c 'linux_enable_reap' "$REPO/client/lib/bootstrap_linux.sh"
-  [ "$output" -ge 3 ]
-  mkdir -p "$BATS_TEST_TMPDIR/lstub"
+@test "Linux: update removes the Claude reaper timer that clients before 0.13 installed" {
+  sysd="$BATS_TEST_TMPDIR/sysd"
+  mkdir -p "$sysd/user" "$BATS_TEST_TMPDIR/lstub"
+  touch "$sysd/user/devmesh-claude-reap.timer" "$sysd/user/devmesh-claude-reap.service" "$sysd/user/devmesh-tmux.service"
   printf '#!/bin/sh\necho "$@" >>"%s/sc.log"\n' "$BATS_TEST_TMPDIR" >"$BATS_TEST_TMPDIR/lstub/systemctl"
   printf '#!/bin/sh\n' >"$BATS_TEST_TMPDIR/lstub/loginctl"
   chmod +x "$BATS_TEST_TMPDIR/lstub/"*
-  PATH="$BATS_TEST_TMPDIR/lstub:$PATH" run bash -c "source '$REPO/client/lib/bootstrap_linux.sh'; linux_enable_reap"
+  PATH="$BATS_TEST_TMPDIR/lstub:$PATH" BS_SYSTEMD="$sysd" run bash -c "source '$REPO/client/lib/bootstrap_linux.sh'; linux_remove_reap"
   [ "$status" -eq 0 ]
-  grep -qx -- '--global enable devmesh-claude-reap.timer' "$BATS_TEST_TMPDIR/sc.log"
+  grep -qx -- '--global disable devmesh-claude-reap.timer' "$BATS_TEST_TMPDIR/sc.log"
+  [ ! -e "$sysd/user/devmesh-claude-reap.timer" ] && [ ! -e "$sysd/user/devmesh-claude-reap.service" ]
+  [ -e "$sysd/user/devmesh-tmux.service" ]
+  # Nothing to do on a machine that never had it.
+  rm -f "$BATS_TEST_TMPDIR/sc.log"
+  PATH="$BATS_TEST_TMPDIR/lstub:$PATH" BS_SYSTEMD="$sysd" run bash -c "source '$REPO/client/lib/bootstrap_linux.sh'; linux_remove_reap"
+  [ "$status" -eq 0 ]
+  [ ! -e "$BATS_TEST_TMPDIR/sc.log" ]
 }

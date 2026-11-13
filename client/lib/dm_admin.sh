@@ -66,6 +66,9 @@ dm_rm() {
   name=${name%%$'\t'*}
   dm_confirm "$name" || dm_die "not confirmed"
   dm_trust_revoke "$name"
+  # Before the hub forgets it: the machines that are online drop its Herdr app key too. The
+  # key only ever worked from the device's mesh address, which the hub stops routing below.
+  dm_herdr_revoke "$name" >/dev/null 2>&1 || dm_info "some machines were offline: their Herdr key for $name goes on: dm herdr revoke $name"
   ssh -o ConnectTimeout=6 hub-admin remove "$name" --confirm "$name"
   dm_refresh >/dev/null 2>&1 || true
 }
@@ -174,29 +177,38 @@ dm_version() { cat "$(dm_share_dir)/VERSION" 2>/dev/null || printf 'dev\n'; }
 
 dm_help() {
   cat <<'EOF'
-dm                      workspace: the panel + one tab per open terminal, in one screen
-                        (tap a tab to switch · tabs reconnect by themselves · Ctrl+a d: leave)
-dm new [machine]        new terminal, guided: machine → project
-dm list                 plain list of every terminal on every machine; pick to enter
-dm go [machine] [name]  enter a machine's terminal (default "main"); path A, falls back to B
-dm close                close a terminal (asks to type its name)
-dm who                  terminals as a table: id, command, agent state, origin, clients
+devmesh: the private network under your machines. Herdr (https://herdr.dev) runs the
+terminals and agents on top of it; devmesh reaches, wakes and joins the machines.
+
+Use the machines
+dm use <machine> [--cwd DIR] [--attach] [-- command...]
+                        run a command (default: a shell) in a Herdr terminal on that
+                        machine, waking it first if it is asleep (needs herdr-core there)
+dm power <machine> [status|wake|suspend|off]
+                        power state; suspend/off only when a machine on its LAN can wake it
+dm wake [machine]       Wake-on-LAN through another machine on the same LAN
+dm go [machine] [name]  plain terminal (tmux, default "main"); fallback when Herdr is not
+                        reachable. Path A, falls back to B
 dm send [file]          send a file to a machine (~/devmesh-inbox or a project)
 dm fetch                bring a file from a machine's inbox/outbox
 dm port [stop]          preview a machine's dev server here (http://localhost:<port>)
 dm mesh                 what this machine exposes on the mesh (Linux) + how to open a port
+
+Herdr mobile app
+dm herdr allow <device> <ssh-public-key>
+                        let that device's Herdr app sign in to every machine (only from
+                        the device's mesh address)
+dm herdr revoke <device> | dm herdr ls
+
+Devices
 dm add <name>           one join line for any device (copied + QR); [--lan home] [--watch-hub]
-dm devices | rm         list / revoke devices (via the hub)
-dm wake [machine]       Wake-on-LAN through another machine on the same LAN
-dm refresh | update     pull device list and ssh config | update this client
-dm repoint <ip|host>    follow the hub to a new address (after "make restore"); checks its host key
+dm devices | rm         list / revoke devices (via the hub); rm also revokes Herdr keys
 dm approve [name]       list / approve devices waiting for approval (approver devices only)
 dm trust init|pin|status  signed keys: sign existing devices (owner) | trust the approvers | show
-dm agent <state>        for tool hooks: working | waiting | idle | clear
-dm watch [on|off]       phone/desktop alerts when a terminal waits for you (Approve/Reject)
-dm vscode on|off|status VS Code terminals inside tmux on this machine (opt-in; status shows which)
+dm refresh | update     pull device list and ssh config | update this client
+dm repoint <ip|host>    follow the hub to a new address (after "make restore"); checks its host key
 dm notify on|off|status push to the phone when Claude needs you on this machine (opt-in)
-dm _key / _watch        machine-side helpers for dm watch (not for direct use)
+
 Networks that block UDP: dm falls back to the reverse tunnel (path B) automatically.
 EOF
 }

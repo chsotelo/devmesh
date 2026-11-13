@@ -11,9 +11,6 @@ fi
 set -euo pipefail
 export DM_SELF
 DM_SELF=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")
-# The Go panel runs dm through this bash: on Termux "#!/usr/bin/env bash" only works for
-# programs that go through termux-exec, and Go programs do not.
-export DM_BASH=$BASH
 
 dm_share_dir() {
   local here
@@ -33,26 +30,21 @@ dm_share_dir() {
   fi
 }
 
-for _lib in dm_core dm_remote dm_terms dm_files dm_admin dm_repoint dm_trust dm_ui dm_app dm_workspace dm_layout dm_watch dm_vscode dm_notify tui_target dm_feed dm_claude dm_power; do
+for _lib in dm_core dm_remote dm_files dm_admin dm_repoint dm_trust dm_notify dm_power dm_herdr; do
   # shellcheck source=/dev/null
   source "$(dm_share_dir)/lib/$_lib.sh"
 done
 unset _lib
 
 dm_dispatch() {
-  local cmd=${1:-workspace}
+  local cmd=${1:-help}
   shift || true
   case $cmd in
-    workspace | menu | terms | t) dm_ws_start ;;
-    panel) dm_app_main ;;
-    _app) dm_app_dispatch "$@" ;;
-    _tab) dm_ws_tab "$@" ;;
-    _ws) dm_ly_dispatch "$@" ;;
-    list) dm_terms ;;
-    new) dm_ui_new "$@" ;;
     go | m) dm_go "$@" ;;
-    close) dm_close ;;
-    who) dm_who ;;
+    use) dm_use "$@" ;;
+    power) dm_power_cmd "$@" ;;
+    wake) dm_wake "$@" ;;
+    herdr) dm_herdr "$@" ;;
     send) dm_send "$@" ;;
     fetch) dm_fetch ;;
     port) dm_port "$@" ;;
@@ -60,66 +52,38 @@ dm_dispatch() {
     devices | ls) dm_devices ;;
     add) dm_add "$@" ;;
     rm) dm_rm ;;
-    wake) dm_wake "$@" ;;
     refresh) dm_refresh ;;
     repoint) dm_repoint "$@" ;;
     approve) dm_approve "$@" ;;
     trust) dm_trust "$@" ;;
     update) dm_update ;;
     version) dm_version ;;
-    agent) dm_agent "$@" ;;
-    watch) dm_watch "$@" ;;
-    vscode) dm_vscode "$@" ;;
     notify) dm_notify "$@" ;;
     help | -h | --help) dm_help ;;
+    # Kept so installs from before 0.13 do not break: Claude hooks that still call
+    # "dm agent", and VS Code terminal profiles that still start "dm _vscode-shell".
+    agent) return 0 ;;
+    _vscode-shell) exec "${SHELL:-/bin/sh}" -l ;;
     # Machine-side helpers, called over SSH by other devices.
-    _preview) dm_ui_preview "$@" ;;
-    _feed) dm_feed "$@" ;;
-    _shot) dm_feed_shot "$@" ;;
-    _proj) dm_feed_projects "$@" ;;
-    _i18n) dm_feed_i18n ;;
-    _new) dm_feed_new "$@" ;;
-    _cstop) dm_claude_cstop "$@" ;;
-    _cresume) dm_claude_cresume "$@" ;;
-    _cnew) dm_claude_cnew "$@" ;;
-    _cmove) dm_claude_cmove "$@" ;;
-    _claude) dm_claude ;;
-    _claude_reap) dm_claude_reap ;;
-    _claude_sleep) dm_claude_sleep "$@" ;;
-    _claude_stop) dm_claude_stop "$@" ;;
-    _claude_resume) dm_claude_resume "$@" ;;
-    _claude_new) dm_claude_new "$@" ;;
-    _claude_info) dm_claude_info "$@" ;;
-    _claude_probe) dm_claude_probe "$@" ;;
-    _claude_export) dm_claude_export "$@" ;;
-    _claude_forget) dm_claude_forget "$@" ;;
-    _claude_import) dm_claude_import "$@" ;;
-    _who) dm_remote_who ;;
-    _capture) dm_remote_capture "$@" ;;
     _clients) dm_remote_clients "$@" ;;
     _projects) dm_remote_projects ;;
     _attach) dm_remote_attach "$@" ;;
-    _has) dm_remote_has "$@" ;;
-    _kill) dm_remote_kill "$@" ;;
     _ports) dm_remote_ports ;;
     _recent) dm_remote_recent ;;
     _dest) dm_remote_dest "$@" ;;
     _wol) dm_remote_wol "$@" ;;
     _power) dm_power "$@" ;;
     _power_do) dm_power_do "$@" ;;
-    _watch) dm_remote_watch ;;
-    _key) dm_remote_key "$@" ;;
-    _notify-act) dm_watch_act "$@" ;;
+    _herdr) dm_remote_herdr "$@" ;;
     _notify) dm_notify_hook ;;
-    _vscode-shell) dm_vscode_shell ;;
     *) dm_die "unknown command: $cmd (try: dm help)" ;;
   esac
 }
 
 dm_main() {
-  # "agent" runs from tool hooks on every prompt, _vscode-shell starts every VS Code
-  # terminal: both stay free of config and network.
-  if [[ ${1:-} != agent && ${1:-} != help && ${1:-} != version && ${1:-} != _vscode-shell ]]; then
+  # "agent" (old Claude hooks) and _vscode-shell (old VS Code profiles) run on every prompt
+  # or terminal: both stay free of config and network.
+  if [[ -n ${1:-} && ${1:-} != agent && ${1:-} != help && ${1:-} != version && ${1:-} != _vscode-shell ]]; then
     dm_load_conf
   fi
   dm_dispatch "$@"

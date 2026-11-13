@@ -6,7 +6,6 @@ setup() {
   VER=$(tr -d '[:space:]' <"$REPO/VERSION")
   OUT="$BATS_TEST_TMPDIR/dist"
   TARBALL="$OUT/devmesh-$VER.tar.gz"
-  export DM_RELEASE_TUI=0 # building five Go targets belongs to its own test
 }
 
 sha_check() {
@@ -58,26 +57,4 @@ sha_check() {
   [ "$status" -ne 0 ]
   run bash "$REPO/scripts/release.sh" "$VER-beta" "$OUT"
   [ "$status" -ne 0 ]
-}
-
-@test "release builds the dm-tui binaries (make tui-all with the release version) into the tarball" {
-  mkdir -p "$BATS_TEST_TMPDIR/bin"
-  cat >"$BATS_TEST_TMPDIR/bin/make" <<'STUB'
-#!/usr/bin/env bash
-# Stub make: records its arguments and drops a fake binary where tui-all would.
-printf '%s\n' "$*" >"$STUB_MAKE_LOG"
-mkdir -p "$2/client/bin"
-printf 'fake' >"$2/client/bin/dm-tui-linux-amd64"
-STUB
-  chmod +x "$BATS_TEST_TMPDIR/bin/make"
-  # release.sh checks that Go exists before it calls make; the runner may have none.
-  printf '#!/bin/sh\nexit 0\n' >"$BATS_TEST_TMPDIR/bin/go"
-  chmod +x "$BATS_TEST_TMPDIR/bin/go"
-  export STUB_MAKE_LOG="$BATS_TEST_TMPDIR/make.log"
-  DM_RELEASE_TUI=1 PATH="$BATS_TEST_TMPDIR/bin:$PATH" run bash "$REPO/scripts/release.sh" "$VER" "$OUT"
-  rm -f "$REPO/client/bin/dm-tui-linux-amd64"
-  [ "$status" -eq 0 ]
-  grep -q "tui-all VERSION=$VER" "$STUB_MAKE_LOG"
-  run tar -tzf "$TARBALL"
-  [[ $output == *"devmesh-$VER/client/bin/dm-tui-linux-amd64"* ]]
 }

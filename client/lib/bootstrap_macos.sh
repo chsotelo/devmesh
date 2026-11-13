@@ -58,13 +58,13 @@ macos_enroll_fields() {
 macos_install_client() {
   local bin
   bin=$(macos_brew_bin)
-  rm -rf "${MX_SHARE:?}/lib" "${MX_SHARE:?}/shell" "${MX_SHARE:?}/hooks" "${MX_SHARE:?}/tmux" "${MX_SHARE:?}/sbin"
+  rm -rf "${MX_SHARE:?}/lib" "${MX_SHARE:?}/shell" "${MX_SHARE:?}/tmux" "${MX_SHARE:?}/sbin"
+  bs_remove_legacy "$MX_SHARE"
   install -d "$MX_SHARE" "$MX_SHARE/sbin" "$bin"
-  cp -R "$DM_DIST_DIR/lib" "$DM_DIST_DIR/shell" "$DM_DIST_DIR/hooks" "$DM_DIST_DIR/tmux" "$MX_SHARE/"
+  cp -R "$DM_DIST_DIR/lib" "$DM_DIST_DIR/shell" "$DM_DIST_DIR/tmux" "$MX_SHARE/"
   install -m 0755 "$DM_DIST_DIR/bin/dm" "$bin/dm"
   install -m 0755 "$DM_DIST_DIR/sbin/devmesh-node" "$MX_SHARE/sbin/devmesh-node"
   printf '%s\n' "$DM_VERSION" >"$MX_SHARE/VERSION"
-  bs_install_tui "$DM_DIST_DIR/bin" "$MX_SHARE/bin"
   local rc line="[ -r $MX_SHARE/shell/devmesh.sh ] && . $MX_SHARE/shell/devmesh.sh"
   # zsh is the macOS default shell; bash only if the user already has a ~/.bashrc.
   for rc in "$HOME/.zshrc" "$HOME/.bashrc"; do
@@ -72,19 +72,15 @@ macos_install_client() {
       bs_ensure_line "$rc" "$line"
     fi
   done
-  macos_reap_agent
+  macos_remove_reap
 }
 
-# Idle Claude sessions stop by themselves: a user agent every 5 minutes. Installed with the
-# client, so "dm update" gives it to machines enrolled before this existed.
-macos_reap_agent() {
-  local bash5
-  bash5="$(macos_brew_bin)/bash"
-  install -d -m 0700 "$MX_CONF_DIR/logs"
-  install -d "$MX_AGENTS"
-  macos_plist net.devmesh.claude-reap '  <key>StartInterval</key><integer>300</integer>' \
-    "$bash5" "$(macos_brew_bin)/dm" _claude_reap >"$MX_AGENTS/net.devmesh.claude-reap.plist"
-  macos_load_agent net.devmesh.claude-reap || bs_log "could not load net.devmesh.claude-reap"
+# The Claude idle-reaper agent of clients before 0.13 (Herdr runs the sessions now).
+macos_remove_reap() {
+  local plist="$MX_AGENTS/net.devmesh.claude-reap.plist"
+  [[ -e $plist ]] || return 0
+  launchctl bootout "gui/$(id -u)/net.devmesh.claude-reap" >/dev/null 2>&1 || true
+  rm -f "$plist"
 }
 
 # User-level sshd: localhost only, this user only, keys only (the synced clients.pub).

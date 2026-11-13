@@ -33,27 +33,6 @@ jobs:
         run: |
           make lint
 
-  go:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: tui/go.mod
-          cache-dependency-path: tui/go.sum
-      - name: Vet
-        working-directory: tui
-        run: go vet ./...
-      - name: Format
-        working-directory: tui
-        run: test -z "$(gofmt -l .)"
-      - name: Test
-        working-directory: tui
-        run: go test ./...
-      - name: Build every dm-tui target
-        run: make tui-all
-
   unit-linux:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
