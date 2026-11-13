@@ -1038,6 +1038,16 @@ epoch_bundle_line() { # KEYFILE SIGNER SERIAL LISTFILE
   [ "$status" -eq 0 ]
 }
 
+@test "dm approve reads the typed tail from stdin even though it asks the hub first" {
+  enroll_owner
+  enroll_dev tab2 phone
+  cfp=$(tr_fingerprint "$(pubof "$K/tab2-client")")
+  # A real ssh without -n swallows the rest of stdin: the read-only hub calls must not.
+  STUB_SSH_EAT_STDIN=1 run dm_approve tab2 <<<"${cfp: -16}"
+  [ "$status" -eq 0 ]
+  [[ $output == *"approved tab2"* ]]
+}
+
 @test "dm trust init: per-device fingerprint tails (or --i-checked-all) are required" {
   enroll_dev lap machine
   enroll_dev tablet phone

@@ -70,9 +70,9 @@ dm_trust_known_hosts() {
 # trust active the hub's signature over "devmesh-bundle-v1 <version> <sha256>" must verify.
 dm_trust_fetch_dist() {
   local tmp=$1 sig version sha installed
-  ssh -o ConnectTimeout=6 hub-admin dist >"$tmp/dist.tgz" || dm_die "cannot download from hub"
+  ssh -n -o ConnectTimeout=6 hub-admin dist >"$tmp/dist.tgz" || dm_die "cannot download from hub"
   if dm_trust_active; then
-    sig=$(ssh -o ConnectTimeout=6 hub-admin dist sig 2>/dev/null) ||
+    sig=$(ssh -n -o ConnectTimeout=6 hub-admin dist sig 2>/dev/null) ||
       dm_die "the hub has no signed client bundle; nothing installed (DM_TRUST=open skips this check)"
     version=$(tar -xzOf "$tmp/dist.tgz" VERSION 2>/dev/null | head -n1)
     [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || dm_die "invalid bundle version"
@@ -115,7 +115,7 @@ dm_yes_allowed() { [[ ${DM_TEST:-0} == 1 ]] || dm_die "--yes only works in tests
 # dm_approve_rows -> hub list of devices waiting for a signature (validated, TSV)
 dm_approve_rows() {
   local rows name kind cpub hpub at origin need
-  rows=$(ssh -o ConnectTimeout=6 hub-admin pending) || dm_die "cannot reach the hub"
+  rows=$(ssh -n -o ConnectTimeout=6 hub-admin pending) || dm_die "cannot reach the hub"
   while IFS=$'\t' read -r name kind cpub hpub at origin need; do
     [[ $name =~ $TR_NAME_RE && $kind =~ ^(machine|phone|client)$ && $cpub =~ $TR_KEY_RE &&
       $need =~ ^(client|host|client\+host)$ ]] || continue
@@ -247,7 +247,7 @@ dm_trust_pin() {
   if [[ -s $allowed ]] && ((! reset)); then
     dm_die "this device already trusts approvers ($allowed). To replace them on purpose: dm trust pin --reset"
   fi
-  rows=$(ssh -o ConnectTimeout=6 hub-admin signers) || dm_die "cannot reach the hub"
+  rows=$(ssh -n -o ConnectTimeout=6 hub-admin signers) || dm_die "cannot reach the hub"
   [[ -n $rows ]] || dm_die "the hub has no approvers yet (devmesh invite <name> --owner)"
   work=$(mktemp -d)
   while IFS=$'\t' read -r name key proof; do
@@ -289,7 +289,7 @@ dm_trust_pin() {
     dm_die "no trustworthy approver in the hub's list (the owner entry is missing)"
   }
   # Learn the revocations and the epoch now, so they are kept next to allowed_signers.
-  if bundle=$(ssh -o ConnectTimeout=6 hub-admin bundle 2>/dev/null) && [[ -n $bundle ]]; then
+  if bundle=$(ssh -n -o ConnectTimeout=6 hub-admin bundle 2>/dev/null) && [[ -n $bundle ]]; then
     printf '%s\n' "$bundle" >"$work/bundle"
     tr_process_bundle "$work/allowed" "$work/bundle" 1 >/dev/null 2>&1 || dm_info "note: the hub's revocation data was not accepted yet"
   fi
@@ -375,7 +375,7 @@ dm_trust_status() {
   else
     printf 'approvers none on this device (dm trust pin)\n'
   fi
-  pending=$(ssh -o ConnectTimeout=6 hub-admin pending 2>/dev/null | grep -c . || true)
+  pending=$(ssh -n -o ConnectTimeout=6 hub-admin pending 2>/dev/null | grep -c . || true)
   [[ $pending == 0 ]] || printf 'waiting for approval: %s\n' "$pending"
   return 0
 }
@@ -391,12 +391,12 @@ dm_trust_revoke() {
   allowed=$(dm_allowed_signers)
   mine=$(dm_trust_my_pub)
   log=$(dm_approved_log)
-  hubkey=$(ssh -o ConnectTimeout=6 hub-admin bundle 2>/dev/null |
+  hubkey=$(ssh -n -o ConnectTimeout=6 hub-admin bundle 2>/dev/null |
     awk -v n="$name" '($1 == "client" || $1 == "signer") && $2 == n {print $3 " " $4; exit}')
   key=$(awk -v n="$name" '$1 == n {print $3 " " $4; exit}' "$allowed")
   [[ -n $key ]] || key=$(awk -F'\t' -v n="$name" '$1 == n {k = $2} END {print k}' "$log" 2>/dev/null)
   if [[ -z $key && -z $hubkey ]]; then
-    if ssh -o ConnectTimeout=6 hub-admin pending 2>/dev/null | cut -f1 | grep -x "$name" >/dev/null; then
+    if ssh -n -o ConnectTimeout=6 hub-admin pending 2>/dev/null | cut -f1 | grep -x "$name" >/dev/null; then
       dm_info "$name was never approved: no revocation needed"
       return 0
     fi

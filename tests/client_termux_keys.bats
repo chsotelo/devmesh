@@ -89,3 +89,15 @@ stub_reload() {
   termux_extra_keys
   [ ! -e "$BATS_TEST_TMPDIR/reload.log" ]
 }
+
+@test "termux join: packages install without ever waiting on a hidden dpkg question" {
+  mkdir -p "$BATS_TEST_TMPDIR/pstub"
+  printf '#!/bin/sh\necho "DEBIAN_FRONTEND=$DEBIAN_FRONTEND $*" >>"%s/pkg.log"\nread -r x && echo "read stdin: $x" >>"%s/pkg.log"\nexit 0\n' \
+    "$BATS_TEST_TMPDIR" "$BATS_TEST_TMPDIR" >"$BATS_TEST_TMPDIR/pstub/pkg"
+  chmod +x "$BATS_TEST_TMPDIR/pstub/pkg"
+  PATH="$BATS_TEST_TMPDIR/pstub:$PATH" DM_DIST_DIR="$REPO/client" run bash -c \
+    "source '$REPO/client/lib/bootstrap_termux.sh'; termux_pkg_install <<<'should not be read'"
+  [ "$status" -eq 0 ]
+  grep -q 'DEBIAN_FRONTEND=noninteractive install -y .*--force-confold.* wireguard-tools' "$BATS_TEST_TMPDIR/pkg.log"
+  ! grep -q 'read stdin' "$BATS_TEST_TMPDIR/pkg.log"
+}
