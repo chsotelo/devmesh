@@ -250,3 +250,46 @@ dm_power() {
   esac
   printf 'ok\n'
 }
+
+# dm power HOST [status|wake|suspend|off] — the user command over dm_power.
+dm_power_cmd() {
+  local host=${1:-} action=${2:-status} line can=()
+  dm_require_machines
+  [[ -n $host ]] || host=$(dm_machines | dm_pick "machine") || return 0
+  [[ -n $(dm_host_field "$host" kind) ]] || dm_die "no device '$host' (dm devices)"
+  case $action in
+    status)
+      line=$(dm_power "$host" check)
+      [[ $line =~ suspend=([01])\ off=([01])\ wake=([01])\ why=([a-z-]+) ]] || dm_die "$M_PW_E_FAILED"
+      if dm_is_self "$host" || dm_path "$host" >/dev/null 2>&1; then
+        dm_t "$M_PW_STATE_ON" "$host"
+      else
+        dm_t "$M_PW_STATE_OFF" "$host"
+      fi
+      printf '\n'
+      [[ ${BASH_REMATCH[1]} == 1 ]] && can+=(suspend)
+      [[ ${BASH_REMATCH[2]} == 1 ]] && can+=(off)
+      [[ ${BASH_REMATCH[3]} == 1 ]] && can+=(wake)
+      if ((${#can[@]})); then
+        dm_t "$M_PW_CAN" "${can[*]}"
+        printf '\n'
+      else
+        printf '%s\n' "$(dm_power_why "${BASH_REMATCH[4]}")"
+      fi
+      ;;
+    off)
+      dm_t "$M_PW_CONFIRM_OFF" "$host" >&2
+      printf '\n' >&2
+      dm_confirm "$host" || dm_die "not confirmed"
+      dm_power "$host" off
+      dm_info "$(dm_t "$M_PW_DONE_OFF" "$host")"
+      ;;
+    suspend | wake)
+      dm_power "$host" "$action"
+      if [[ $action == suspend ]]; then dm_info "$(dm_t "$M_PW_DONE_SUSPEND" "$host")"; else
+        dm_info "$(dm_t "$M_PW_DONE_WAKE" "$host")"
+      fi
+      ;;
+    *) dm_die "usage: dm power <machine> [status|wake|suspend|off]" ;;
+  esac
+}

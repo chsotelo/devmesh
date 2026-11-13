@@ -171,45 +171,6 @@ EOF
   ! grep -q 'Host lap-l' "$HOME/.ssh/config.d/devmesh-lan"
 }
 
-@test "terminal list: machine color, global id, agent state, offline machines" {
-  t=$'\t'
-  ssh_reply lap "dm _who" "redi${t}1${t}redi:claude${t}1${t}claude${t}waiting${t}tablet${t}1700000000${t}$(date +%s)${t}tablet,local"$'\n'
-  STUB_SSH_DOWN="pc2 pc2-b" COLUMNS=120 run dm_term_lines
-  [ "$status" -eq 0 ]
-  [[ ${lines[0]} == "lap${t}redi${t}1${t}"* ]]
-  [[ ${lines[0]} == *$'\033[38;5;22m●'* ]]
-  [[ ${lines[0]} == *"lap:redi:1*"* ]]
-  [[ ${lines[0]} == *"waiting"* ]]
-  [[ ${lines[0]} == *"[tablet,local]"* ]]
-  [[ ${lines[1]} == "pc2${t}-${t}-${t}"*"OFFLINE"* ]]
-}
-
-@test "terminal list: compact format on narrow screens" {
-  t=$'\t'
-  ssh_reply lap "dm _who" "main${t}0${t}x${t}1${t}zsh${t}-${t}-${t}-${t}0${t}-"$'\n'
-  STUB_SSH_DOWN="pc2 pc2-b" COLUMNS=40 run dm_term_lines
-  [[ ${lines[0]} == *"lap:main:0* zsh"* ]]
-  [[ ${lines[0]} != *"·"* ]]
-}
-
-@test "a machine with no tmux sessions is listed as empty, not offline" {
-  STUB_SSH_DOWN="pc2 pc2-b" run dm_term_lines
-  [[ ${lines[0]} == *"lap  (no terminals)"* ]]
-}
-
-@test "remote who: one line per window with attached device names" {
-  t=$'\t'
-  s='|~|'
-  printf 'redi%s1%sredi:claude%s1%sclaude%sworking%stablet%s1700000000%s1700000100\n' "$s" "$s" "$s" "$s" "$s" "$s" "$s" "$s" >"$BATS_TEST_TMPDIR/w"
-  printf 'logs%s0%slogs:tail%s1%stail%s%s%s%s1700000200\n' "$s" "$s" "$s" "$s" "$s" "$s" "$s" "$s" >>"$BATS_TEST_TMPDIR/w"
-  mkdir -p "$BATS_TEST_TMPDIR/proc/4242"
-  printf 'HOME=/x\0DEVMESH_FROM=tablet\0' >"$BATS_TEST_TMPDIR/proc/4242/environ"
-  printf '4242%sredi\n4343%sredi\n' "$s" "$s" >"$BATS_TEST_TMPDIR/c"
-  DM_PROC="$BATS_TEST_TMPDIR/proc" STUB_TMUX_WINDOWS="$BATS_TEST_TMPDIR/w" STUB_TMUX_CLIENTS="$BATS_TEST_TMPDIR/c" run dm_remote_who
-  [ "${lines[0]}" = "redi${t}1${t}redi:claude${t}1${t}claude${t}working${t}tablet${t}1700000000${t}1700000100${t}tablet,local" ]
-  [ "${lines[1]}" = "logs${t}0${t}logs:tail${t}1${t}tail${t}-${t}-${t}-${t}1700000200${t}-" ]
-}
-
 @test "remote attach creates the session with trace metadata in the project dir" {
   mkdir -p "$HOME/PROJECTS/redi"
   run dm_remote_attach redi proj:redi tablet
@@ -239,17 +200,6 @@ EOF
   run dm_remote_dest 'proj:../x'
   [ "$status" -ne 0 ]
   run dm_remote_dest /etc
-  [ "$status" -ne 0 ]
-}
-
-@test "agent state is set on the calling pane only" {
-  TMUX_PANE=%3 dm_agent waiting
-  grep -q 'tmux set-option -p -t %3 @agent waiting' "$STUB_LOG"
-  TMUX_PANE=%3 dm_agent clear
-  grep -q 'tmux set-option -p -u -t %3 @agent' "$STUB_LOG"
-  run env -u TMUX_PANE bash -c "source '$REPO/client/lib/dm_core.sh'; source '$REPO/client/lib/dm_remote.sh'; dm_agent working"
-  [ "$status" -eq 0 ]
-  TMUX_PANE=%3 run dm_agent hacked
   [ "$status" -ne 0 ]
 }
 
@@ -300,8 +250,8 @@ EOF
 @test "dm entrypoint: unknown commands fail, help works without enrollment" {
   run env DM_CONF=/nonexistent bash "$REPO/client/bin/dm" help
   [ "$status" -eq 0 ]
-  [[ $output == *"dm new"* ]]
-  run env DM_CONF=/nonexistent bash "$REPO/client/bin/dm" terms
+  [[ $output == *"dm use"* && $output == *"dm herdr allow"* ]]
+  run env DM_CONF=/nonexistent bash "$REPO/client/bin/dm" go
   [ "$status" -ne 0 ]
   [[ $output == *"not enrolled"* ]]
   run bash "$REPO/client/bin/dm" frobnicate
@@ -335,7 +285,7 @@ EOF
 
 @test "with no machines, terminal commands explain what to do instead of an empty list" {
   printf 'tablet\tphone\t10.73.0.4\t-\t-\t-\t-\t-\n' >"$DM_CACHE/hosts.tsv"
-  for f in dm_terms dm_new dm_who; do
+  for f in dm_go dm_use dm_power_cmd; do
     run "$f" </dev/null
     [ "$status" -ne 0 ]
     [[ $output == *"no machines yet"* && $output == *"dm add"* ]] || {
@@ -350,42 +300,6 @@ EOF
   touch "$HOME/PROJECTS/file.txt"
   run dm_remote_projects
   [ "$output" = $'api\nredi' ]
-}
-
-@test "remote who survives tmux's C-locale tab mangling (real tmux, LC_ALL=C)" {
-  command -v /opt/homebrew/bin/tmux >/dev/null || skip "no real tmux"
-  sock="$BATS_TEST_TMPDIR/tmux.sock"
-  tm() { LC_ALL=C /opt/homebrew/bin/tmux -S "$sock" "$@"; }
-  tm new-session -d -s work -n "redi:claude"
-  # dm_remote_who calls "tmux"; point it at the private server under the C locale.
-  tmux() { LC_ALL=C /opt/homebrew/bin/tmux -S "$sock" "$@"; }
-  run dm_remote_who
-  tm kill-server
-  [[ ${lines[0]} == "work"$'\t'"0"$'\t'"redi:claude"$'\t'* ]] || {
-    echo "got: ${lines[0]}"
-    return 1
-  }
-}
-
-@test "panel: one card per machine, its terminals with state, then the big actions" {
-  t=$'\t'
-  ssh_reply lap "dm _who" "redi${t}1${t}redi:claude${t}1${t}claude${t}waiting${t}tablet${t}1700000000${t}$(date +%s)${t}tablet"$'\n'
-  STUB_SSH_DOWN="pc2 pc2-b" run dm_ui_rows
-  [ "$status" -eq 0 ]
-  [[ ${lines[0]} == "machine${t}lap${t}-${t}-${t}"*"lap"*"1 terminal"* ]]
-  [[ ${lines[0]} != *"toca para"* ]]
-  [[ ${lines[1]} == "term${t}lap${t}redi${t}1${t}"*"redi"*"claude"*"esperando"* ]]
-  printf '%s\n' "${lines[@]}" | grep -q "^offline${t}pc2"
-  printf '%s\n' "${lines[@]}" | grep -q "^action${t}new${t}.*Nueva terminal"
-  printf '%s\n' "${lines[@]}" | grep -q "^action${t}quit"
-}
-
-@test "panel preview shows the live screen of a terminal and explains actions" {
-  ssh_reply lap "dm _capture redi 1" $'$ claude\n> working on it\n'
-  run dm_ui_preview term lap redi 1
-  [[ $output == *"lap:redi:1"* && $output == *"> working on it"* ]]
-  run dm_ui_preview action new
-  [[ $output == *"Crea una terminal"* ]]
 }
 
 @test "remote capture validates its arguments" {
@@ -430,63 +344,6 @@ exit 1
   grep -q '^ssh -t .* pc2 dm _attach api - tablet' "$STUB_LOG"
 }
 
-@test "workspace: opening a terminal focuses its tab, or creates it with the machine color" {
-  TMUX=fake
-  printf '@7 mac:redi\n' >"$BATS_TEST_TMPDIR/wins"
-  tmux() {
-    printf 'tmux %s\n' "$*" >>"$STUB_LOG"
-    case $1 in
-      list-windows) cat "$BATS_TEST_TMPDIR/wins" ;;
-      new-window) echo @9 ;;
-    esac
-  }
-  dm_ws_open mac redi
-  grep -q '^tmux select-window -t @7$' "$STUB_LOG"
-  ! grep -q new-window "$STUB_LOG"
-  : >"$STUB_LOG"
-  dm_ws_open lap api
-  grep -q '^tmux new-window -P -F #{window_id} -n lap:api ' "$STUB_LOG"
-  grep -q '^tmux set-option -w -t @9 @dm_color 22$' "$STUB_LOG"
-}
-
-@test "workspace tab: a clean detach closes it, a dropped link offers reconnect or close" {
-  tmux() { printf 'tmux %s\n' "$*" >>"$STUB_LOG"; }
-  dm_tty() { return 0; }
-  run dm_ws_tab lap main - -
-  [ "$status" -eq 0 ]
-  grep -q 'tmux select-window -t :=panel' "$STUB_LOG"
-  dm_tty() { return 255; }
-  run dm_ws_tab lap main - - <<<"q"
-  [ "$status" -eq 0 ]
-  [[ $output == *"Conexión con lap perdida"* ]]
-}
-
-@test "workspace tab: a machine that does not answer says so once and keeps trying by itself" {
-  tmux() { printf 'tmux %s\n' "$*" >>"$STUB_LOG"; }
-  dm_tty() { dm_die "lap is unreachable"; }
-  export STUB_SSH_DOWN="lap lap-b"
-  # Two keys that retry at once, then q.
-  run dm_ws_tab lap main - - <<<$'xyq'
-  [ "$status" -eq 0 ]
-  [[ $output != *"perdida"* ]]
-  [ "$(grep -c 'lap no responde' <<<"$output")" -eq 1 ]
-  [ "$(grep -c '^ssh .* lap-b true' "$STUB_LOG")" -ge 3 ]
-}
-
-@test "workspace tab: w on a machine that does not answer sends Wake-on-LAN" {
-  tmux() { printf 'tmux %s\n' "$*" >>"$STUB_LOG"; }
-  dm_tty() { return 255; }
-  dm_wake() { printf 'wake %s\n' "$*" >>"$STUB_LOG"; }
-  export STUB_SSH_DOWN="lap lap-b"
-  run dm_ws_tab lap main - - <<<$'wq'
-  [ "$status" -eq 0 ]
-  grep -q '^wake lap$' "$STUB_LOG"
-}
-
-@test "workspace tab: retries wait longer each time, up to 30 s" {
-  [ "$(for n in 1 2 3 4 5 6; do dm_ws_backoff "$n"; done | tr '\n' ' ')" = "3 6 12 24 30 30 " ]
-}
-
 @test "this device is reached locally: dm_run and dm_tty never ssh to themselves" {
   export DM_SELF="$REPO/client/bin/dm" DM_NAME=tablet
   run dm_run tablet dm version
@@ -498,20 +355,6 @@ exit 1
   [ "$(dm_path tablet)" = tablet ]
   run dm_local rm -rf /
   [ "$status" -eq 2 ]
-}
-
-@test "workspace tabs: this device first, then the other machines" {
-  export DM_NAME=lap
-  [ "$(dm_workspace_hosts | tr '\n' ' ')" = "lap pc2 " ]
-  export DM_NAME=tablet
-  [ "$(dm_workspace_hosts | tr '\n' ' ')" = "tablet lap pc2 " ]
-}
-
-@test "remote who: no tmux server yet means no terminals, not an error" {
-  tmux() { return 1; }
-  run dm_remote_who
-  [ "$status" -eq 0 ]
-  [ -z "$output" ]
 }
 
 @test "auto update: a Mac or phone installs a newer signed client when dm opens, then starts on it" {

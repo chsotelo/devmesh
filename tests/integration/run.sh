@@ -215,9 +215,13 @@ check_not "github-style hosts are untouched by the devmesh ssh config" bash -c \
 say "terminals"
 eventually 40 "tmux 'main' kept alive on lap (user service + linger)" x dm-lap sudo -u dev tmux has-session -t main
 x dm-lap sudo -u dev tmux new-session -d -s work -c /home/dev || true
-check "dm who on pc2 lists lap terminals" bash -c "docker exec -u dev dm-pc2 bash -lc 'dm who' | grep -q 'lap:work:0'"
-check "dm _has works over ssh" xu dm-pc2 "ssh lap dm _has work"
-check "dm _attach is refused for bad names" bash -c "! docker exec -u dev dm-pc2 bash -lc 'ssh lap dm _has \"a.b\"'"
+check "dm _clients works over ssh" xu dm-pc2 "ssh lap dm _clients work"
+check "dm _attach is refused for bad names" bash -c "! docker exec -u dev dm-pc2 bash -lc 'ssh lap dm _attach \"a.b\" - pc2'"
+HK='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIEXLRAJBEPPkAFFOE1fycCswpwLZ3lJmT93re0ErGPd'
+check "dm _herdr pins a Herdr app key to one mesh address on lap" bash -c \
+  "docker exec -u dev dm-pc2 bash -lc 'ssh lap dm _herdr add tablet 10.73.0.9 $HK' && docker exec dm-lap grep -q '^from=\"10.73.0.9\",no-agent-forwarding' /home/dev/.ssh/authorized_keys"
+check "dm _herdr rm takes it back" bash -c \
+  "docker exec -u dev dm-pc2 bash -lc 'ssh lap dm _herdr rm tablet' && ! docker exec dm-lap grep -q devmesh-herdr:tablet /home/dev/.ssh/authorized_keys"
 x dm-lap sudo -u dev bash -c 'cd /home/dev && nohup python3 -m http.server 8000 --bind 127.0.0.1 >/dev/null 2>&1 &'
 sleep 1
 check "UI preview: localhost-only dev server reachable from pc2 via ssh -L" xu dm-pc2 \

@@ -30,12 +30,12 @@ termux_enroll_fields() {
 
 termux_install_client() {
   local share="$TX_PREFIX/share/devmesh"
-  rm -rf "${share:?}/lib" "${share:?}/shell" "${share:?}/hooks" "${share:?}/tmux"
+  rm -rf "${share:?}/lib" "${share:?}/shell" "${share:?}/tmux"
+  bs_remove_legacy "$share"
   install -d "$share" "$TX_PREFIX/bin"
-  cp -R "$DM_DIST_DIR/lib" "$DM_DIST_DIR/shell" "$DM_DIST_DIR/hooks" "$DM_DIST_DIR/tmux" "$share/"
+  cp -R "$DM_DIST_DIR/lib" "$DM_DIST_DIR/shell" "$DM_DIST_DIR/tmux" "$share/"
   install -m 0755 "$DM_DIST_DIR/bin/dm" "$TX_PREFIX/bin/dm"
   printf '%s\n' "$DM_VERSION" >"$share/VERSION"
-  bs_install_tui "$DM_DIST_DIR/bin" "$share/bin"
   bs_ensure_line "$HOME/.bashrc" "[ -r $share/shell/devmesh.sh ] && . $share/shell/devmesh.sh"
   termux_extra_keys
 }

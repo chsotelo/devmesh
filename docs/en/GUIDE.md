@@ -1,9 +1,10 @@
 # devmesh: user guide
 
-**All your terminals, on all your machines, from anywhere.**
+**A private network, device trust and power for your machines.**
 devmesh joins your dev machines, your Mac, your tablet and your phone in one private
-network. From any of them you see the terminals open on the others, enter the one you
-want, create new ones and move files, also when you are away from home.
+network. From any of them you reach the others, wake them, send files and decide which
+devices are trusted, also when you are away from home. [Herdr](https://herdr.dev) runs the
+terminals and agents on top.
 
 Spanish version: [../es/GUIA.md](../es/GUIA.md). Install summary: [../../README.md](../../README.md).
 
@@ -14,7 +15,7 @@ Spanish version: [../es/GUIA.md](../es/GUIA.md). Install summary: [../../README.
 | Piece | What it is | Examples |
 |---|---|---|
 | **Hub** | The control point. Coordinates the private network, takes registrations and alerts you when something goes down | `hub.example.com` or `203.0.113.10` |
-| **Machine** | A computer where you work. Its terminals live in tmux and can be seen from anywhere | Your always-on laptop, other PCs |
+| **Machine** | A computer where you work. You reach it from anywhere, and Herdr runs your terminals and agents on it | Your always-on laptop, other PCs |
 | **Control** | A device you manage the machines from | Your Mac |
 | **Mobile** | An Android tablet or phone with Termux | Your tablet, your phone |
 
@@ -142,159 +143,90 @@ Homebrew's bash if it finds it.
 
 ---
 
-## 3. Day to day: one workspace
+## 3. Herdr on top
 
-On any device type:
+devmesh is the network. [Herdr](https://herdr.dev) (desktop and mobile apps) runs the
+terminals and agents on your machines. devmesh does not install Herdr: it is optional, and
+what needs `herdr-core` on a machine says so when it is missing.
+
+A typical use: keep a powerful PC asleep, and from the laptop type
 
 ```bash
-dm
+dm use pc claude
 ```
 
-It looks like the terminal panel of VS Code: **a tab per machine on top, the list of that
-machine's terminals on the left, the real terminal on the right**.
+devmesh wakes `pc` with Wake-on-LAN if it is asleep, waits for it, and starts `claude` in a
+Herdr terminal there. Then you watch and drive it in Herdr, on the desktop or on the phone.
 
-```
- devmesh │ ● laptop  desktop  ○ builder                   + │ 🗑 │ ✕   <- machines (tabs) and buttons
-▎ >_ api              ● │ $ claude
-  >_ web                │   I updated the auth middleware…
-  >_ docs             ● │   Edit src/auth.ts?   (the selected terminal, live)
-```
+### `dm use`: run something on a machine
 
-- **Top bar = machine selector.** The active tab is bright with the machine's color; the others
-  are gray; a machine that is off shows `○`. Tap or click a tab to switch machine.
-- **Left = the machine's terminals**, one row each, with a dot for the agent in it (yellow
-  waiting, blue working, green idle). Tap a row (or `enter`) to show it on the right; arrows or
-  `j`/`k` move; the list refreshes every 3 seconds.
-- **Buttons (top right):** `+` new terminal (type a name), `🗑` delete the terminal on screen
-  (asks first), `✕` leave: everything keeps running and the next `dm` brings you back to the
-  same place. Keys: `Ctrl+a +`, `Ctrl+a x`, `Ctrl+a d`.
-- **Phone:** under 70 columns the list is hidden and the terminal fills the screen; `☰` (or
-  `Ctrl+a s`) swaps to the list and back, and choosing a row returns to the terminal.
-- **If the connection drops, the terminal reconnects by itself.** If the machine does not
-  answer at all (asleep, off or offline), the terminal says so once and keeps trying, less
-  often each time (up to every 30 s); `w` sends Wake-on-LAN, `q` closes it.
-- Needs tmux 3.2 or newer and the `dm-tui` binary. Without them, or with `DM_UI=cards` /
-  `DM_UI=fzf`, `dm` uses the card panel / the fzf panel described below.
-
-### The card panel (`DM_UI=cards`)
-
-The panel is made for touch (a phone or a portrait tablet in Termux) and also works with a
-keyboard and a mouse:
-
-```
- ‹ back  devmesh 0.8.1 › laptop              [new] [↻] [send] [web] [fetch]  <- buttons: tap them
- ● laptop  3 terminals                                           [new]
-╭─────────────────────────────────╮ ╭────────────────────────────────╮
-│ api                   ● waiting │ │ web                            │  <- one card per terminal:
-│ claude · tablet             40s │ │ node · laptop               5m │     name, state, command,
-│ ── tablet ───────────────────── │ │ ────────────────────────────── │     origin, last activity,
-│ I updated the auth middleware … │ │ $ npm run dev                  │     clients and a live
-│ Edit src/auth.ts?               │ │ VITE v6 ready in 312 ms        │     thumbnail of its screen
-╰─────────────────────────────────╯ ╰────────────────────────────────╯
- ○ desktop  offline                                             [wake]
-                     enter open  n new  / filter  ? shortcuts  q quit
- tablet · 3 machines · 3 terminals · 1 waiting                          <- status + shortcuts
+```bash
+dm use <machine> [--cwd DIR] [--attach] [-- command...]
 ```
 
-- **Cards, not a list:** each machine is a section and each terminal a card. The grid has one
-  column on a phone, two on a portrait tablet and more on a wide screen. The thumbnail shows
-  as many lines as fit.
-- **Detail:** on a narrow screen `enter` (or tapping a selected card) opens the terminal's
-  detail: a big live view with `[open]`, `[send file]` and `[web]`; `esc` goes back. From 140
-  columns the detail is a pane next to the cards and `enter` opens the terminal directly.
-- **Offline machines** are dimmed with their `[wake]` button (Wake-on-LAN through another
-  machine on the same network). A machine with no terminals says so and offers `[new]`.
-- **It refreshes by itself:** the machines every 4 seconds, the thumbnails of the cards in
-  view every 3 seconds. A slow or dead machine never blocks the panel.
-- **Touch:** tap a card to select it and tap again to open it; the buttons on top and the
-  ones on each machine are tappable; the wheel scrolls.
-- **New terminal:** `n` (or `[new]`). Pick the machine (skipped when you only have one), then a
-  project, or **type a name** in the box at the bottom: typing filters the projects and
-  offers `+ New terminal "<name>"`. It opens as a new tab and the panel stays.
-- **Add a device:** `a`, type its name (for example `lap`) and press enter. The single-use
-  line and the QR code appear. With no machines yet, the first screen explains this and
-  offers `[add device]`.
-- **Filter:** `/` and type; `esc` clears the filter, and `esc` on the home screen quits.
+- Runs the command in a Herdr terminal on that machine, through its `herdr-core`. With no
+  command it starts a shell.
+- If the machine is asleep it is woken first and `dm use` waits up to 180 s for it
+  (`DM_USE_WAIT=<seconds>` changes it).
+- `--cwd DIR` sets the folder. `--attach` attaches the terminal right here instead of only
+  starting it.
+- It needs `herdr-core` on the target. If it is missing, `dm use` says so and installs nothing.
 
-| Key | Action |
-|---|---|
-| arrows · `h j k l` | Move between cards and machines |
-| `enter` | Open the terminal or its detail; open a machine's menu; wake an offline machine |
-| `o` | Open the selected terminal |
-| `n` | New terminal (on a machine screen, on that machine) |
-| `s` · `f` | Send a file · fetch a file |
-| `w` | Preview a machine's dev server here |
-| `d` · `a` | List devices · add a device |
-| `r` | Refresh |
-| `/` | Filter the terminals |
-| `esc` | Back (on the home screen: clear the filter, then quit) |
-| `?` | Show all shortcuts |
-| `q` · `ctrl+c` | Quit the panel |
+### `dm power`: see and change a machine's power
 
-The panel is the `dm-tui` program that comes with the client. It only draws: everything
-that touches a machine is done by `dm`, as before. Where there is no `dm-tui` for your
-system, or with `DM_TUI=0 dm`, the classic fzf panel is used instead (with an fzf older than
-0.66, a one-menu-at-a-time version). If tmux is missing, the panel runs without tabs.
+```bash
+dm power <machine> [status|wake|suspend|off]
+```
 
-### Claude sessions
+- `status` (the default) shows whether the machine is on or off and what can be done.
+- `suspend` and `off` are allowed only when another online machine on its trusted LAN can
+  wake it again. `off` asks you to type the machine's name. The machine you are on never
+  powers itself off.
+- `wake` sends Wake-on-LAN through another machine on the same LAN, like `dm wake`.
 
-The list on the left shows that machine's **Claude Code sessions** by the name you gave them
-(`claude --name "19Oct - redi general"`) and one word of state: `working`, `waiting`, or how
-long they have been idle (`20 min`, `5 h`, `3 d`). Tap one and it opens on the right: type
-there as usual. devmesh reads the session registry Claude Code keeps itself; nothing to
-install.
+### Herdr mobile app
 
-- **Stop:** select a session and tap `Stop`. It ends and frees its memory, and stays in
-  `History ›`. When sessions have been idle for over 1 h, one line offers to stop them all.
-- **On their own after 2 h:** sessions running in devmesh that sit idle for 2 h stop by
-  themselves, checked every 5 minutes (`DM_CLAUDE_AUTOSTOP_MIN=0` turns it off). Their terminal
-  stays open, asleep, showing the session; Enter resumes it right there with the whole
-  conversation. Sessions not running inside tmux are never touched.
-- **Closed by hand:** when Claude ends in a devmesh terminal (`/exit`, Ctrl+C), the
-  `claude --resume …` line it prints is already typed at the next prompt: Enter resumes,
-  Ctrl+C drops it.
-- **History ›:** named, stopped sessions from the last 30 days, with a search box.
-  `Resume` reopens one where it left off, with the whole conversation.
-- **＋ New:** a name (prefilled with the date, `27Oct - `) and a project folder; it starts
-  `claude --name` there.
-- **Move to <machine>:** stops the session here and resumes it on the other machine with
-  the whole conversation; from then on that machine provides the memory, CPU and runs the
-  commands (you keep seeing and typing from wherever you are). The other machine needs
-  Claude installed and the same project under `~/PROJECTS` at the same commit: with
-  uncommitted changes or different commits it tells you what to do instead of moving.
-- **Terminals ›:** your usual terminals.
-- **`⏻` suspend, power off, wake:** only what can be undone from here is offered. A machine
-  is suspended or powered off only when another online machine shares its trusted network
-  and Wake-on-WLAN is on, so it can be woken again. Power off asks twice and only the power
-  button turns it back on. The machine you are on never powers itself off.
+Use only the official app from [herdr.dev/mobile](https://herdr.dev/mobile) (Google Play id
+`dev.herdr.app`). Third-party "Herdr Mobile" apps that ask you to install a
+`herdr-mobile-bridge` talk to the Herdr TUI, not to `herdr-core`, and see nothing.
 
-### Language
+1. **The phone or tablet is in the mesh with WireGuard on.** It is the WireGuard app tunnel you
+   imported when you joined the device.
+2. **Add each machine in the app** by its mesh IP (`10.73.0.x`, see `dm devices`), port `22` and
+   the machine's user.
+3. **Choose "Add the key yourself".** The app shows a key (or a whole line that adds it). On a
+   joined device run:
+   ```bash
+   dm herdr allow phone '<what the app shows>'
+   ```
+   You can paste the whole line. devmesh finds the public key in it and adds it to
+   `~/.ssh/authorized_keys` on every machine. The entry is tagged `devmesh-herdr:phone`,
+   works only from the phone's mesh IP (`from="<mesh IP>"`) and allows no forwarding.
+   Machines that are offline are reported: run the same command again when they are back,
+   it is safe to repeat.
+4. **Each machine needs `herdr-core`.** It comes with the Herdr desktop app, or install it.
+5. **macOS machines need Remote Login.** devmesh's own sshd on a Mac listens only on
+   `127.0.0.1`, so the app cannot use it. Turn on System Settings > General > Sharing >
+   Remote Login, allow only your user, and turn off "full disk access for remote users".
+   Make the macOS sshd keys-only. Linux machines need nothing: sshd already listens on the
+   mesh IP.
 
-The panel and the device setup messages are in **English** by default. For Spanish set
-`DM_LANG=es` (for example `DM_LANG=es dm`), or use a Spanish locale (`LANG=es_PE.UTF-8`).
-Anything missing from a translation shows in English.
+```bash
+dm herdr ls                    # the keys, per machine
+dm herdr revoke phone          # remove the keys of that device
+```
 
-### Commands, if you prefer them
+`dm rm <device>` also revokes that device's Herdr keys on every machine that is online.
 
-| You want to… | Type |
-|---|---|
-| Open the workspace | `dm` |
-| New terminal (guided) | `dm new`, or straight on a machine: `dm new mac` |
-| Enter directly | `dm go mac api` |
-| See every terminal | `dm list` · `dm who` (table with agent state and clients) |
-| Close a terminal | `dm close` |
-| Send / fetch files | `dm send` · `dm fetch` |
-| See a machine's web app | `dm port` (stop with `dm port stop`) |
-| See / change what a machine exposes on the mesh | `dm mesh` |
-| Devices · add · remove | `dm devices` · `dm add <name>` · `dm rm` |
-| Wake a machine | `dm wake <machine>` |
-| Pull the device list | `dm refresh` |
-| Update `dm` | `dm update` |
-| Follow a moved hub | `dm repoint <ip-or-host>` |
-| Report the agent state (hooks) | `dm agent working\|waiting\|idle\|clear` |
-| Help | `dm help` |
+### `dm go`: a plain terminal
 
-### Inside a terminal (tmux)
+```bash
+dm go                  # pick a machine, enter its terminal "main"
+dm go mac api          # machine "mac", terminal "api"
+```
+
+It opens a tmux terminal on the machine, over path A, falling back to B. Use it when Herdr is
+not reachable, for example from Termux or on a network that only allows path B. Inside it:
 
 | Shortcut | What it does |
 |---|---|
@@ -304,22 +236,35 @@ Anything missing from a translation shows in English.
 | `Ctrl+b` `%` · `Ctrl+b` `"` | Split the screen |
 | `Ctrl+b` `d` | **Leave without closing anything**: everything keeps running |
 
-The bottom bar always tells you where you are: **machine │ session │ tabs │ who is connected**,
-in that machine's color.
+### Language
 
-### VS Code terminals
+Messages are in **English** by default. For Spanish set `DM_LANG=es` (for example
+`DM_LANG=es dm help`), or use a Spanish locale (`LANG=es_PE.UTF-8`). Anything missing from a
+translation shows in English.
 
-On a machine, `dm vscode on` adds a `devmesh` terminal profile to VS Code (and VS Code
-Insiders and Cursor, if installed). Terminals opened from then on start inside tmux,
-named after the project folder (a second one in the same folder is `<project>-2`), so
-other devices see them and can attach to the same live terminal.
+### Commands
 
-- `dm vscode status` shows, per settings file, whether it is `on`, `off`, `not-json` or `missing`.
-- `dm vscode off` removes the profile and restores your previous default terminal.
-- Settings files with comments or trailing commas are not changed: `dm` prints the
-  snippet to paste. A `settings.json.devmesh-bak` copy is made before the first change.
-- Terminals keep running when VS Code closes. Scroll with the mouse (tmux mouse is on).
-  `Ctrl+b` is tmux's prefix key.
+`dm` with no arguments prints this list (`dm help`).
+
+| You want to… | Type |
+|---|---|
+| Run something on a machine (wakes it) | `dm use <machine> [--cwd DIR] [--attach] [-- command...]` |
+| See or change a machine's power | `dm power <machine> [status\|wake\|suspend\|off]` |
+| Let the Herdr app in | `dm herdr allow <device> <key>` · `dm herdr revoke <device>` · `dm herdr ls` |
+| Plain terminal | `dm go [machine] [name]` |
+| Send / fetch files | `dm send` · `dm fetch` |
+| See a machine's web app | `dm port` (stop with `dm port stop`) |
+| See / change what a machine exposes on the mesh | `dm mesh` |
+| Devices · add · remove | `dm devices` · `dm add <name>` · `dm rm` |
+| Approve a device · signed trust | `dm approve` · `dm trust init\|pin\|status` |
+| Wake a machine | `dm wake <machine>` |
+| Pull the device list | `dm refresh` |
+| Update `dm` | `dm update` |
+| Follow a moved hub | `dm repoint <ip-or-host>` |
+| Phone push when Claude needs you | `dm notify on\|off\|status` |
+| Help | `dm help` |
+
+The shell integration adds one alias, `m='dm go'`.
 
 ---
 
@@ -449,10 +394,11 @@ and access to the hub, and within a minute all your machines stop accepting its 
 |---|---|
 | `dm` says a machine is OFFLINE | Check that it is on. If it has network but does not answer, try `dm wake <machine>` from another machine on its LAN |
 | The VPN does not connect at a hotel or office | Do nothing: `dm` uses path B automatically |
-| The tablet "disconnects" | Android is closing Termux. Type `dm` again: your terminals are intact on the machine |
+| The tablet "disconnects" | Android is closing Termux. Open your session again: what was running on the machine is intact (in Herdr, or in tmux with `dm go`) |
 | `dm` says "not enrolled" | That device is not registered: `dm add <name>` from another device and paste the line here |
 | The line says "missing secret" | It was copied incompletely: it must end in `sh -s` plus 12 characters |
 | The line gives 404 | It expired (15 min), was already used or was cancelled: make another with `dm add` |
 | An IP-mode hub moved and devices cannot reach it | `dm repoint <new-ip>` on each device |
 | Installer says the OS is not supported | Use Docker: `HUB_HOST=… docker compose -f docker/hub/compose.yml up -d --build` |
-| I want to see what Claude is doing in each terminal | Add the hooks from `share/devmesh/hooks/claude-code-hooks.json` to that machine's `~/.claude/settings.json` |
+| `dm use` says herdr-core is not on the machine | Herdr is optional. Install `herdr-core` there (it comes with the Herdr desktop app) |
+| The Herdr app on the phone sees no machines | WireGuard must be on in the phone, the machine added by its mesh IP, and the key passed with `dm herdr allow`. On a Mac, turn on Remote Login |

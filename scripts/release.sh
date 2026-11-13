@@ -31,13 +31,6 @@ if [[ $base != "$file_version" ]]; then
   die "version '$version' does not match VERSION file ('$file_version')"
 fi
 
-# The Go panel ships in the tarball (client/bin/dm-tui-<os>-<arch>): build it with the release
-# version unless told not to (DM_RELEASE_TUI=0, for builds without Go).
-if [[ ${DM_RELEASE_TUI:-1} == 1 ]]; then
-  command -v go >/dev/null 2>&1 || die "Go is needed to build dm-tui (DM_RELEASE_TUI=0 skips it)"
-  make -C "$root" tui-all VERSION="$version" >&2 || die "building dm-tui failed"
-fi
-
 name="devmesh-$version"
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT

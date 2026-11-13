@@ -7,6 +7,33 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-13
+
+devmesh is now the network under Herdr (https://herdr.dev): it reaches, wakes and joins your
+machines; Herdr runs the terminals and agents on top. Herdr stays optional.
+
+### Added
+
+- `dm use <machine> [--cwd DIR] [--attach] [-- command...]`: runs a command (default: a shell)
+  in a Herdr terminal on that machine, waking it first when it is asleep (Wake-on-LAN, up to
+  `DM_USE_WAIT` seconds, default 180). Needs herdr-core on the machine; devmesh never installs it.
+- `dm power <machine> [status|wake|suspend|off]`: the power control that only the Go panel
+  offered. Suspend and off keep the rule that another machine on its LAN must be able to wake it.
+- `dm herdr allow <device> <key>`, `revoke`, `ls`: the Herdr mobile app's SSH key on every
+  machine, usable only from that device's mesh address and without forwarding. The whole line
+  the app shows can be pasted. `dm rm` revokes it too.
+
+### Removed
+
+- Everything that duplicated Herdr: the panel and workspace (`dm` with no arguments now prints
+  help), the Go panel (`tui/`, `dm-tui`, `make tui`, `make demo`), `dm new`, `dm list`,
+  `dm who`, `dm close`, `dm claude` and its idle reaper, `dm agent`, `dm watch`, `dm vscode`,
+  the Claude hooks example, and the shell integration's tmux autostart and resume line (it
+  only adds `m` = `dm go`). `dm go` stays as the plain terminal for Termux and path B.
+- `dm update` cleans what older clients installed: the Go panel binaries, the hooks folder, the
+  reaper timer (Linux) or agent (macOS). `dm agent` and `dm _vscode-shell` still answer (doing
+  nothing, or starting the login shell) so old Claude hooks and VS Code profiles do not break.
+
 ## [0.12.3] - 2026-11-02
 
 ### Fixed

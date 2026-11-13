@@ -29,31 +29,6 @@ dm_session_clients() {
     done
 }
 
-# _who: one TSV line per window:
-# session win_index win_name win_active command agent origin created activity clients
-dm_remote_who() {
-  local fmt clients t=$DM_TMUX_SEP
-  clients=$(dm_session_clients)
-  fmt="#{session_name}${t}#{window_index}${t}#{window_name}${t}#{window_active}${t}#{pane_current_command}"
-  fmt+="${t}#{@agent}${t}#{@origin}${t}#{@created}${t}#{window_activity}"
-  # No tmux server yet is "no terminals" (EMPTY), not an unreachable machine.
-  { tmux list-windows -a -F "$fmt" 2>/dev/null || true; } | dm_tmux_tsv |
-    DM_CLIENTS=$clients awk -F'\t' -v OFS='\t' '
-      BEGIN {
-        n = split(ENVIRON["DM_CLIENTS"], rows, "\n")
-        for (i = 1; i <= n; i++) {
-          if (split(rows[i], f, "\t") < 2) continue
-          # Test membership before assigning: mawk creates att[k] as soon as it is the target.
-          prev = (f[1] in att) ? att[f[1]] "," : ""
-          att[f[1]] = prev f[2]
-        }
-      }
-      {
-        for (i = 6; i <= 8; i++) if ($i == "") $i = "-"
-        print $1, $2, $3, $4, $5, $6, $7, $8, $9, (($1 in att) ? att[$1] : "-")
-      }'
-}
-
 # _clients SESSION: comma list of attached origins (tmux status bar).
 dm_remote_clients() {
   dm_session_clients | awk -F'\t' -v s="$1" '$1 == s {o = o (o ? "," : "") $2} END {print o}'
@@ -110,21 +85,6 @@ dm_remote_dest() {
   printf '%s\n' "$dir"
 }
 
-# _capture SESSION WINDOW: the current screen of a terminal (colors kept), for previews.
-dm_remote_capture() {
-  dm_valid_session "$1" || dm_die "invalid session name"
-  [[ $2 =~ ^[0-9]+$ ]] || dm_die "invalid window"
-  LC_ALL=${LC_ALL:-en_US.UTF-8} tmux capture-pane -p -e -J -t "=$1:$2" 2>/dev/null |
-    awk '{lines[NR] = $0} END {while (NR > 0 && lines[NR] ~ /^[[:space:]]*$/) NR--; for (i = (NR > 40 ? NR - 39 : 1); i <= NR; i++) print lines[i]}'
-}
-
-dm_remote_kill() {
-  dm_valid_session "$1" || dm_die "invalid session name"
-  tmux kill-session -t "=$1"
-}
-
-dm_remote_has() { tmux has-session -t "=$1" 2>/dev/null; }
-
 # _ports: listening TCP ports on this machine (excluding sshd), "port<TAB>process".
 dm_remote_ports() {
   if ! command -v ss >/dev/null; then
@@ -160,73 +120,4 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
     s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     s.sendto(packet, ("255.255.255.255", 9))
 PY
-}
-
-# agent <working|waiting|idle|clear>: called by tool hooks (Claude Code, Codex, ...).
-dm_agent() {
-  local state=${1:-}
-  [[ -n ${TMUX_PANE:-} ]] || return 0
-  case $state in
-    working | waiting | idle)
-      tmux set-option -p -t "$TMUX_PANE" @agent "$state"
-      tmux set-option -p -t "$TMUX_PANE" @agent_since "$(date +%s)"
-      ;;
-    clear)
-      tmux set-option -p -u -t "$TMUX_PANE" @agent
-      tmux set-option -p -u -t "$TMUX_PANE" @agent_since
-      ;;
-    *) dm_die "usage: dm agent working|waiting|idle|clear" ;;
-  esac
-}
-
-# One pane title, safe for a TSV line and a notification: no control characters, max 80.
-dm_watch_clean() {
-  local t
-  t=$(printf '%s' "$1" | LC_ALL=C tr -d '[:cntrl:]')
-  printf '%s' "${t:0:80}"
-}
-
-# _watch: long-running; one TSV line per agent state change in any pane:
-# session window pane_id state since title. Ends when the reader closes the pipe.
-dm_remote_watch() {
-  local -A prev=()
-  local i=0 max=${DM_WATCH_ITERATIONS:-0} t=$DM_TMUX_SEP
-  local session window pane state since title key
-  while :; do
-    while IFS=$'\t' read -r session window pane state since title; do
-      [[ -n $state && $state != - ]] || continue
-      [[ $since =~ ^[0-9]+$ ]] || since=0
-      key="$state $since"
-      [[ ${prev[$pane]:-} == "$key" ]] && continue
-      prev[$pane]=$key
-      printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$session" "$window" "$pane" "$state" "$since" \
-        "$(dm_watch_clean "$title")" || exit 0
-    done < <(tmux list-panes -a -F "#{session_name}${t}#{window_index}${t}#{pane_id}${t}#{@agent}${t}#{@agent_since}${t}#{pane_title}" 2>/dev/null | dm_tmux_tsv | awk -F'\t' -v OFS='\t' '{for (i = 1; i <= 5; i++) if ($i == "") $i = "-"; print}')
-    i=$((i + 1))
-    ((max > 0 && i >= max)) && return 0
-    sleep "${DM_WATCH_INTERVAL:-1}"
-  done
-}
-
-# _key PANE SINCE KEY: answer a waiting prompt, only if it is still the one that was notified.
-dm_remote_key() {
-  local pane=${1:-} since=${2:-} key=${3:-} cur
-  if ! [[ $pane =~ ^%[0-9]+$ && $since =~ ^[0-9]+$ ]]; then
-    printf 'usage: dm _key %%<pane> <since> 1|2|3|Escape|Enter\n' >&2
-    exit 2
-  fi
-  case $key in
-    1 | 2 | 3 | Escape | Enter) ;;
-    *)
-      printf 'key not allowed\n' >&2
-      exit 2
-      ;;
-  esac
-  cur=$(tmux display-message -p -t "$pane" "#{@agent}${DM_TMUX_SEP}#{@agent_since}" 2>/dev/null | dm_tmux_tsv) || cur=""
-  if [[ $cur != "waiting"$'\t'"$since" ]]; then
-    printf 'stale\n'
-    exit 3
-  fi
-  tmux send-keys -t "$pane" "$key"
-  printf 'sent\n'
 }

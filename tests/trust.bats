@@ -376,7 +376,6 @@ node_dist() {
   rm -rf "$d"
   mkdir -p "$d/src"
   cp -R "$REPO/client" "$d/src/client"
-  rm -f "$d/src/client/bin/dm-tui-"*
   printf '%s\n' "$1" >"$d/src/VERSION"
   tar -C "$d/src" -czf "$d/dist.tgz" client VERSION
   cp "$d/dist.tgz" "$r/dist"

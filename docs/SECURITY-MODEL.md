@@ -3,7 +3,7 @@
 ## Assets
 
 - **Access to your machines**: who can open an SSH session on each machine.
-- **Terminal contents**: what you type and see in the shared tmux sessions.
+- **Terminal contents**: what you type and see in the terminals on your machines (`dm go` sessions, Herdr terminals).
 - **Keys**: each device's client key (`~/.ssh/id_devmesh`), machines' host keys, WireGuard keys, the hub's keys.
 - **Client code** that `dm update` installs on every device.
 
@@ -40,7 +40,7 @@ Each device verifies against its local `allowed_signers` (`ssh-keygen -Y verify`
 - **Revocation freshness.** A device learns about a revocation when it syncs a bundle carrying the new epoch. Until then, or while the hub withholds the new bundle entirely, it keeps trusting the key. A device that has seen epoch N never accepts anything older, nor a serial more than 1000 ahead of the stored one.
 - **Approver compromise.** An approver key can approve anything until it is revoked by another approver. Keep approvers few and locked.
 - **Requirement.** Verifying devices need OpenSSH 8.1 or newer (`ssh-keygen -Y`): Ubuntu 20.04 and later, macOS 13 and later, current Termux.
-- **Not protected.** The operating system of each machine, and what Claude or any program runs there.
+- **Not protected.** The operating system of each machine, and what any program, agent or terminal runs there.
 
 ## Exposed ports (hub)
 
@@ -87,30 +87,29 @@ Traffic with no encryption of its own that crosses the mesh is decrypted at the 
 topology), so root on the hub can read it. SSH and `dm port` (inside SSH) are not readable.
 Use `dm port` for web servers and databases instead of opening them.
 
-## The Go panel (`dm-tui`)
+## Herdr app keys and machine power
 
-`dm-tui` is a presentation layer and nothing else: it holds no keys, opens no network connection and has no ssh code. Every remote or sensitive operation is done by the bash `dm`, started with an argument vector (never a shell string), and arguments are validated again in Go before they are passed. What machines send (window names, commands, screens, project folders) is untrusted: escape sequences, control characters and bidi marks are stripped before anything is drawn, so a terminal title cannot move the cursor or fake the interface. The binaries travel in the signed client bundle (`devmesh-bundle-v1`), so `dm update` verifies them like the scripts.
-
-## Claude sessions and machine power
-
-- **Stopping sessions:** a session is signalled only after its pid is checked to be a live
-  Claude Code process whose registry file names that session id; stale registry files are
-  ignored. The 2-hour auto-stop runs as the user, only on sessions inside devmesh's tmux,
-  and re-checks idleness right before stopping.
-- **Moving a session** copies its transcript from one machine to another through the
-  controller. The destination trusts what the source sends as conversation history, so a
-  compromised source machine could hand a forged history to the agent on the destination.
-  The copy is capped in size, must look like JSON lines, never replaces a running session or
-  a copy whose history it does not start with byte for byte (a stale copy left by an earlier
-  move is replaced), and is refused when the project has uncommitted changes or the commits
-  differ. After the move the source deletes its copy of that transcript.
-  Move only between machines you trust equally.
+- **Herdr app keys (`dm herdr`).** `dm herdr allow <device> <ssh-public-key>` appends one line
+  to `~/.ssh/authorized_keys` on every machine, tagged `devmesh-herdr:<device>`. The line is
+  restricted with `from="<the device's mesh IP>"` and `no-agent-forwarding,no-port-forwarding,no-X11-forwarding`,
+  so the key works only from that device's mesh address and cannot forward anything. It is
+  a login separate from the device's devmesh client key: the approver signatures do not cover
+  it, and the mesh address limits where it can be used, not who holds the private key.
+  `dm herdr ls` lists the keys, `dm herdr revoke <device>` removes them, and `dm rm <device>`
+  revokes them on every online machine (offline ones are reported; run the revoke again later).
+- **macOS.** devmesh's own sshd on a Mac is localhost-only. For the Herdr app the owner turns
+  on macOS Remote Login on purpose, which opens port 22 on the Mac's network interfaces:
+  allow only your user, turn off full disk access for remote users, and make that sshd keys-only.
+- **`dm use`** runs a command in a Herdr terminal on a machine over the same SSH access as
+  `dm go`. It wakes the machine first with Wake-on-LAN when it is asleep. It needs herdr-core
+  on the target; devmesh never installs it.
 - **Power:** Linux nodes get `/etc/polkit-1/rules.d/50-devmesh-power.rules`, which lets the
   enrolled user (validated name) suspend and power off without a password; that is what a
   logged-in desktop user can already do locally. Wake-on-WLAN is enabled only on the WiFi
-  connection of the machine's trusted LAN. The panel offers suspend or power off only when
-  another online machine shares that LAN, so the machine can be woken again.
+  connection of the machine's trusted LAN. `dm power` offers suspend or power off only when
+  another online machine shares that LAN, so the machine can be woken again; `off` asks you
+  to type the machine's name.
 
 ## Trust dependencies
 
-OpenSSH (signatures, sshd), WireGuard, nginx, ntfy, curl, tmux; in domain mode, Let's Encrypt; for backups, age. A flaw in any of these is outside what the signatures cover.
+OpenSSH (signatures, sshd), WireGuard, nginx, ntfy, curl, tmux (for `dm go`); in domain mode, Let's Encrypt; for backups, age. A flaw in any of these is outside what the signatures cover.

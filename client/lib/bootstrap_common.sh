@@ -3,8 +3,6 @@
 
 # shellcheck source=trust_common.sh
 source "${BASH_SOURCE[0]%/*}/trust_common.sh"
-# shellcheck source=tui_target.sh
-source "${BASH_SOURCE[0]%/*}/tui_target.sh"
 
 bs_log() { printf '\033[1m==>\033[0m %s\n' "$*" >&2; }
 bs_die() {
@@ -12,14 +10,10 @@ bs_die() {
   exit 1
 }
 
-# bs_install_tui SRC_BIN_DIR DEST_BIN_DIR: the dm-tui binary of this device's OS/arch, when the
-# bundle carries one (enrollment bundles do not: "dm update" brings it).
-bs_install_tui() {
-  local target
-  target=$(tui_target) || return 0
-  [[ -f $1/dm-tui-$target ]] || return 0
-  install -d "$2"
-  install -m 0755 "$1/dm-tui-$target" "$2/dm-tui-$target"
+# bs_remove_legacy SHARE_DIR: what clients before 0.13 installed and this one no longer ships
+# (the Go panel binaries in SHARE/bin, the Claude hook examples).
+bs_remove_legacy() {
+  rm -rf "${1:?}/bin" "${1:?}/hooks"
 }
 
 bs_require_env() {

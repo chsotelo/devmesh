@@ -15,8 +15,7 @@ EOF
 # Bundle the client files the bootstrap installs (base64 tar.gz).
 client_dist_b64() {
   [[ -d $DEVMESH_SHARE/client ]] || die "missing client dist in $DEVMESH_SHARE/client"
-  # The dm-tui binaries (several MB each) stay out of the enrollment script: "dm update" installs them.
-  tar -C "$DEVMESH_SHARE" --exclude='client/bin/dm-tui-*' -czf - client | base64 | tr -d '\n' | fold -w 76
+  tar -C "$DEVMESH_SHARE" -czf - client | base64 | tr -d '\n' | fold -w 76
   printf '\n'
 }
 
