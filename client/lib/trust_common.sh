@@ -197,7 +197,7 @@ tr_vouch_revocations() {
 # epoch; an empty allowed_signers is never written.
 # Status: 0 ok, 2 no valid line at all, 3 no allowed_signers, 4 rejected by the epoch check.
 tr_process_bundle() {
-  local allowed=$1 bundle=$2 write=${3:-0} work line kind name type k2 sig extra key signer_keys
+  local allowed=$1 bundle=$2 write=${3:-0} work line kind name type k2 sig extra key
   local revfile valid=0 total=0 serial hash esigner esig es eh ss sh out=""
   [[ -s $allowed ]] || return 3
   work=$(mktemp -d) || return 2
@@ -258,8 +258,6 @@ tr_process_bundle() {
     return 4
   fi
 
-  signer_keys=$(awk '{print $3 " " $4}' "$work/cur")
-
   while IFS=$'\t' read -r kind name key sig; do
     if [[ $kind != revoke ]] && awk -v k="$key" '$2 " " $3 == k {f = 1} END {exit !f}' "$work/revoked"; then
       printf 'devmesh: dropped %s %s: key is revoked\n' "$kind" "$name" >&2
@@ -274,7 +272,7 @@ tr_process_bundle() {
         fi
         ;;
       client)
-        if grep -qxF -- "$key" <<<"$signer_keys" || tr_verify "$work/cur" "$sig" "$(tr_msg client "$name" "$key")" >/dev/null; then
+        if grep -qxF -- "$(tr_allowed_line "$name" "$key")" "$work/cur" || tr_verify "$work/cur" "$sig" "$(tr_msg client "$name" "$key")" >/dev/null; then
           out+="client $name $key"$'\n'
         else
           printf 'devmesh: dropped client key of %s: no valid approver signature\n' "$name" >&2

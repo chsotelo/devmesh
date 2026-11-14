@@ -30,7 +30,7 @@ dm_share_dir() {
   fi
 }
 
-for _lib in dm_core dm_remote dm_files dm_admin dm_repoint dm_trust dm_notify dm_power dm_herdr; do
+for _lib in dm_core dm_remote dm_files dm_admin dm_repoint dm_trust dm_notify dm_power dm_herdr dm_door; do
   # shellcheck source=/dev/null
   source "$(dm_share_dir)/lib/$_lib.sh"
 done
@@ -45,6 +45,7 @@ dm_dispatch() {
     power) dm_power_cmd "$@" ;;
     wake) dm_wake "$@" ;;
     herdr) dm_herdr "$@" ;;
+    door) dm_door "$@" ;;
     send) dm_send "$@" ;;
     fetch) dm_fetch ;;
     port) dm_port "$@" ;;
