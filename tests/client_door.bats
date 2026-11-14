@@ -99,7 +99,7 @@ DOOR() { printf '%s/door\n' "$(dirname "$DM_CONF")"; }
   keys=$(cat "$(DOOR)/authorized_keys")
   [ "$keys" = "from=\"10.73.0.2\",restrict $(pubof "$K/lap-client") devmesh-door:lap" ]
   [[ $output == *"door open on 10.73.0.6:8022 for 30m (lap)"* ]]
-  [ "$(stat -f %Lp "$(DOOR)" 2>/dev/null || stat -c %a "$(DOOR)")" = 700 ]
+  [ "$(ls -ld "$(DOOR)" | cut -c1-10)" = drwx------ ]
   grep -q "^sshd -f $(DOOR)/sshd_config" "$STUB_LOG"
   [[ $(door status) == "open on 10.73.0.6:8022, closes in "* ]]
   grep -q '^ListenAddress 10.73.0.6$' "$(DOOR)/sshd_config"
