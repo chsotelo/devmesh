@@ -191,6 +191,8 @@ dm_refresh() (
   install -m 0600 "$tmp/config" "$HOME/.ssh/config.d/devmesh"
   install -m 0600 "$tmp/known" "$HOME/.ssh/devmesh_known_hosts"
   install -m 0600 "$tmp/hosts" "$DM_CACHE/hosts.tsv"
+  # Doors into phones (dm door) are checked against signed keys only: signed mode, machines.
+  if [[ ${DM_KIND:-} == machine ]] && dm_trust_active; then dm_door_ssh_config "$tmp/hosts"; fi
   dm_info "refreshed: $(grep -c . "$DM_CACHE/hosts.tsv") devices"
 )
 
@@ -323,8 +325,11 @@ EOF
 }
 
 # dm_lan_include — ~/.ssh/config reads the LAN aliases (first, like "Include config.d/devmesh").
-dm_lan_include() {
-  local cfg="$HOME/.ssh/config" line="Include config.d/devmesh-lan" tmp
+dm_lan_include() { dm_ssh_include devmesh-lan; }
+
+# dm_ssh_include NAME — ~/.ssh/config reads config.d/NAME (added at the top, once).
+dm_ssh_include() {
+  local cfg="$HOME/.ssh/config" line="Include config.d/$1" tmp
   [[ -f $cfg ]] || : >"$cfg"
   grep -qxF "$line" "$cfg" && return 0
   tmp=$(mktemp)

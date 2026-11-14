@@ -56,9 +56,13 @@ dm_trust_known_hosts() {
   ((rc == 0)) || return "$rc"
   printf '%s\n' "$line"
   while read -r kind name key; do
-    [[ $kind == host ]] || continue
-    printf '%s %s\n' "$name" "$key"
-    seen+="$name "
+    if [[ $kind == host ]]; then
+      printf '%s %s\n' "$name" "$key"
+      seen+="$name "
+    elif [[ $kind == client || $kind == signer ]] && awk -F'\t' -v n="$name" '$1 == n && $2 == "phone" {f = 1} END {exit !f}' "$hosts"; then
+      # A phone's door (dm door) presents its approver-signed client key as host key.
+      printf 'devmesh-door-%s %s\n' "$name" "$key"
+    fi
   done <<<"$verified"
   while IFS=$'\t' read -r name kind _; do
     [[ $kind == machine && $seen != *" $name "* ]] && dm_info "warning: host key of $name is not approved (not in known_hosts; ask an approver: dm approve $name)"

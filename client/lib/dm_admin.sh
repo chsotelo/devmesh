@@ -193,6 +193,9 @@ dm send [file]          send a file to a machine (~/devmesh-inbox or a project)
 dm fetch                bring a file from a machine's inbox/outbox
 dm port [stop]          preview a machine's dev server here (http://localhost:<port>)
 dm mesh                 what this machine exposes on the mesh (Linux) + how to open a port
+dm door open [30m|2h] | close | status
+                        phone/tablet: let your machines in for a while (ssh <device>-door
+                        from a machine); on a machine: which doors are open
 
 Herdr mobile app
 dm herdr allow <device> <ssh-public-key>

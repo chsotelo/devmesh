@@ -112,6 +112,29 @@ Use `dm port` for web servers and databases instead of opening them.
   another online machine shares that LAN, so the machine can be woken again; `off` asks you
   to type the machine's name.
 
+## Doors into phones (`dm door`)
+
+Phones and tablets are clients: nothing listens on them. `dm door open` changes that for a
+limited time and only for your machines:
+
+- The sshd runs inside Termux, so Android's sandbox applies: it reaches Termux's own files and
+  the shared storage the user granted (photos, Download, documents), never other apps' data.
+- It listens only on the device's mesh address (port 8022). With the WireGuard tunnel off it
+  cannot bind and does not start.
+- `authorized_keys` holds only the client keys of machines whose host key and client key an
+  approver signed, verified on the device from the signed bundle, each with
+  `from="<machine mesh IP>",restrict`. The hub cannot add a key; a forged or reused signature is
+  dropped. Pending devices, phones and tablets never get in.
+- The door's host key is the device's own approver-signed client key. Machines pin it under the
+  alias `devmesh-door-<device>` from the verified bundle, so there is no trust on first use.
+- A timer closes it (1 minute to 4 hours, by the clock, started before sshd); `dm door close`
+  closes it at once and ends every session it started. Closing removes the keys and config, and
+  only signals processes whose command line is still the door's.
+- A machine that enters gets a shell as the Termux user (rsync needs one). While the door is
+  open it can read and change that shared storage and copy the device's own client key (it
+  could then act as that device). The door therefore refuses to open on an approver device.
+  Open it only while an agent works on it.
+
 ## Trust dependencies
 
 OpenSSH (signatures, sshd), WireGuard, nginx, ntfy, curl, tmux (for `dm go`); in domain mode, Let's Encrypt; for backups, age. A flaw in any of these is outside what the signatures cover.

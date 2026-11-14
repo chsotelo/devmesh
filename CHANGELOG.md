@@ -7,6 +7,27 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-14
+
+### Added
+
+- `dm door open [30m|2h] | close | status`: a door into a phone or tablet, opened on demand, so
+  an agent on one of your machines can see and move its files (`ssh <device>-door`, rsync, scp).
+  It is a private sshd in Termux that listens only on the device's mesh address, accepts only
+  the client keys of machines an approver signed (each pinned to its mesh address, `restrict`:
+  no forwarding, agent or pty), and closes by itself (1 minute to 4 hours; also when Termux is
+  killed). Signed mode only, and never on an approver device (a machine let in gets a shell and
+  could copy its signing key). The door presents the device's approver-signed client key as its
+  host key, so machines check it against the signed bundle: `dm refresh` on a machine writes
+  `~/.ssh/config.d/devmesh-door` (one `<device>-door` alias per phone) and the matching
+  `devmesh-door-<device>` known_hosts lines. On a machine, `dm door` lists which doors are open.
+
+### Security
+
+- Bundle verification: a `client <name> <key>` line was accepted without a signature whenever the
+  key was any approver's key, whatever the name. It is now accepted that way only under that
+  approver's own name, so the hub cannot attach an approver key to another device.
+
 ## [0.13.2] - 2026-11-13
 
 ### Security
