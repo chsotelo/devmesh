@@ -187,9 +187,8 @@ make integration       # real hub and machines in Docker (needs Docker, internet
 
 ## More
 
-User guide: [English](docs/en/GUIDE.md) · [Español](docs/es/GUIA.md) · Background:
-[docs/history/DESIGN.md](docs/history/DESIGN.md) · [CONTRIBUTING.md](CONTRIBUTING.md) ·
-[CHANGELOG.md](CHANGELOG.md)
+User guide: [English](docs/en/GUIDE.md) · [Español](docs/es/GUIA.md) ·
+[CONTRIBUTING.md](CONTRIBUTING.md) · [CHANGELOG.md](CHANGELOG.md)
 
 ## License
 

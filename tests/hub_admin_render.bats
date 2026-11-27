@@ -159,20 +159,20 @@ admin() { SSH_ORIGINAL_COMMAND=$1 devmesh _ssh "${2:-tablet}"; }
 
 @test "admin: notify claude pushes a fixed message for the calling machine" {
   export NTFY_URL=https://hub.example.test NTFY_TOKEN=tk_test
-  run admin "notify claude redi perm" lap
+  run admin "notify claude billing perm" lap
   [ "$status" -eq 0 ]
-  grep -q '^curl .*Title: Claude on lap: redi' "$STUB_LOG"
+  grep -q '^curl .*Title: Claude on lap: billing' "$STUB_LOG"
   grep -q '^curl .*-d Claude needs your permission' "$STUB_LOG"
   grep -q '^curl-config header = "Authorization: Bearer tk_test"' "$STUB_LOG"
   : >"$STUB_LOG"
-  run admin "notify claude redi wait" lap
+  run admin "notify claude billing wait" lap
   [ "$status" -eq 0 ]
   grep -q '^curl .*-d Claude is waiting for your answer' "$STUB_LOG"
 }
 
 @test "admin: notify rejects unknown kinds and does nothing without ntfy" {
   export NTFY_URL=https://hub.example.test NTFY_TOKEN=tk_test
-  for cmd in 'notify claude redi rm' 'notify claude' 'notify mail redi wait' 'notify claude redi wait extra' 'notify claude Evil.com wait'; do
+  for cmd in 'notify claude billing rm' 'notify claude' 'notify mail billing wait' 'notify claude billing wait extra' 'notify claude Evil.com wait'; do
     run admin "$cmd" lap
     [ "$status" -ne 0 ] || {
       echo "allowed: $cmd"
@@ -180,21 +180,21 @@ admin() { SSH_ORIGINAL_COMMAND=$1 devmesh _ssh "${2:-tablet}"; }
     }
   done
   [ "$(grep -c '^curl' "$STUB_LOG")" -eq 0 ]
-  NTFY_URL='' run admin "notify claude redi wait" lap
+  NTFY_URL='' run admin "notify claude billing wait" lap
   [ "$status" -eq 0 ]
   ! grep -q '^curl' "$STUB_LOG"
 }
 
 @test "admin: notify sends the same message for a project at most once per NOTIFY_EVERY" {
   export NTFY_URL=https://hub.example.test NTFY_TOKEN=tk_test
-  for _ in 1 2 3; do admin "notify claude redi wait" lap; done
+  for _ in 1 2 3; do admin "notify claude billing wait" lap; done
   [ "$(grep -c '^curl ' "$STUB_LOG")" -eq 1 ]
   # Another kind or project is a different message.
-  admin "notify claude redi perm" lap
-  admin "notify claude tandm wait" lap
+  admin "notify claude billing perm" lap
+  admin "notify claude acme wait" lap
   [ "$(grep -c '^curl ' "$STUB_LOG")" -eq 3 ]
   # After the window it is sent again.
-  DEVMESH_NOW=$(($(date +%s) + 601)) admin "notify claude redi wait" lap
+  DEVMESH_NOW=$(($(date +%s) + 601)) admin "notify claude billing wait" lap
   [ "$(grep -c '^curl ' "$STUB_LOG")" -eq 4 ]
 }
 

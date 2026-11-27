@@ -172,21 +172,21 @@ EOF
 }
 
 @test "remote attach creates the session with trace metadata in the project dir" {
-  mkdir -p "$HOME/PROJECTS/redi"
-  run dm_remote_attach redi proj:redi tablet
-  grep -q "tmux new-session -d -s redi -c $HOME/PROJECTS/redi" "$STUB_LOG"
-  grep -q 'tmux set-option -t redi @origin tablet' "$STUB_LOG"
-  grep -q 'tmux set-option -t redi @created [0-9]' "$STUB_LOG"
-  grep -q 'tmux -u attach-session -t =redi' "$STUB_LOG"
+  mkdir -p "$HOME/PROJECTS/billing"
+  run dm_remote_attach billing proj:billing tablet
+  grep -q "tmux new-session -d -s billing -c $HOME/PROJECTS/billing" "$STUB_LOG"
+  grep -q 'tmux set-option -t billing @origin tablet' "$STUB_LOG"
+  grep -q 'tmux set-option -t billing @created [0-9]' "$STUB_LOG"
+  grep -q 'tmux -u attach-session -t =billing' "$STUB_LOG"
 }
 
 @test "remote attach never escapes the projects dir and reuses existing sessions" {
   run dm_remote_attach x 'proj:../../etc' tablet
   grep -q "new-session -d -s x -c $HOME\$" "$STUB_LOG"
   : >"$STUB_LOG"
-  STUB_TMUX_HAS=redi run dm_remote_attach redi - pc2 2
+  STUB_TMUX_HAS=billing run dm_remote_attach billing - pc2 2
   ! grep -q new-session "$STUB_LOG"
-  grep -q 'select-window -t =redi:2' "$STUB_LOG"
+  grep -q 'select-window -t =billing:2' "$STUB_LOG"
   run dm_remote_attach 'bad.name' - tablet
   [ "$status" -ne 0 ]
 }
@@ -296,10 +296,10 @@ EOF
 }
 
 @test "remote projects listing is portable (no find -printf) and skips hidden dirs" {
-  mkdir -p "$HOME/PROJECTS/redi" "$HOME/PROJECTS/.git" "$HOME/PROJECTS/api"
+  mkdir -p "$HOME/PROJECTS/billing" "$HOME/PROJECTS/.git" "$HOME/PROJECTS/api"
   touch "$HOME/PROJECTS/file.txt"
   run dm_remote_projects
-  [ "$output" = $'api\nredi' ]
+  [ "$output" = $'api\nbilling' ]
 }
 
 @test "remote capture validates its arguments" {

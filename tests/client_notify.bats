@@ -18,15 +18,15 @@ setup() {
 }
 
 @test "hook: an idle prompt is sent as wait, from the current folder without CLAUDE_PROJECT_DIR" {
-  mkdir -p "$BATS_TEST_TMPDIR/redi"
-  cd "$BATS_TEST_TMPDIR/redi"
+  mkdir -p "$BATS_TEST_TMPDIR/billing"
+  cd "$BATS_TEST_TMPDIR/billing"
   printf '{"hook_event_name":"Notification","message":"Claude is waiting for your input","notification_type":"idle_prompt"}' |
     CLAUDE_PROJECT_DIR='' dm_notify_hook
-  grep -q '^ssh .*hub-admin notify claude redi wait$' "$STUB_LOG"
+  grep -q '^ssh .*hub-admin notify claude billing wait$' "$STUB_LOG"
 }
 
 @test "hook: never fails Claude, even when the hub is unreachable" {
-  printf '{}' | STUB_SSH_DOWN=hub-admin CLAUDE_PROJECT_DIR=/x/redi dm_notify_hook
+  printf '{}' | STUB_SSH_DOWN=hub-admin CLAUDE_PROJECT_DIR=/x/billing dm_notify_hook
 }
 
 @test "on: adds the hook next to the user's own hooks, once; off removes only it" {
@@ -66,14 +66,14 @@ EOF
 
 @test "hook: nothing is sent while the user is at this machine" {
   dm_user_idle() { printf '30\n'; }
-  printf '{"message":"Claude needs your permission to use Bash"}' | CLAUDE_PROJECT_DIR=/x/redi dm_notify_hook
+  printf '{"message":"Claude needs your permission to use Bash"}' | CLAUDE_PROJECT_DIR=/x/billing dm_notify_hook
   ! grep -q 'hub-admin' "$STUB_LOG"
 }
 
 @test "hook: sent when it cannot tell whether the user is here" {
   dm_user_idle() { return 1; }
-  printf '{"message":"Claude is waiting for your input"}' | CLAUDE_PROJECT_DIR=/x/redi dm_notify_hook
-  grep -q 'hub-admin notify claude redi wait$' "$STUB_LOG"
+  printf '{"message":"Claude is waiting for your input"}' | CLAUDE_PROJECT_DIR=/x/billing dm_notify_hook
+  grep -q 'hub-admin notify claude billing wait$' "$STUB_LOG"
 }
 
 @test "user_idle: the most recent of keyboard/mouse and tmux clients" {
@@ -93,12 +93,12 @@ EOF
 
 @test "hook: the kind comes from notification_type, not from any word in the payload" {
   printf '{"session_id":"s","cwd":"/x/permission-tool","permission_mode":"default","hook_event_name":"Notification","message":"Claude is waiting for your input","notification_type":"idle_prompt"}' |
-    CLAUDE_PROJECT_DIR=/x/redi dm_notify_hook
-  grep -q 'hub-admin notify claude redi wait$' "$STUB_LOG"
+    CLAUDE_PROJECT_DIR=/x/billing dm_notify_hook
+  grep -q 'hub-admin notify claude billing wait$' "$STUB_LOG"
   : >"$STUB_LOG"
   printf '{"permission_mode":"default","notification_type": "permission_prompt","message":"Claude needs your permission to use Bash"}' |
-    CLAUDE_PROJECT_DIR=/x/redi dm_notify_hook
-  grep -q 'hub-admin notify claude redi perm$' "$STUB_LOG"
+    CLAUDE_PROJECT_DIR=/x/billing dm_notify_hook
+  grep -q 'hub-admin notify claude billing perm$' "$STUB_LOG"
 }
 
 @test "on: a symlinked settings file stays a symlink; its target is edited" {
